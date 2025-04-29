@@ -1,12 +1,12 @@
 import React from 'react';
 import { Link } from 'wouter';
-import { 
-  CheckCircle, 
-  DollarSign, 
-  Users, 
-  LineChart, 
-  Award, 
-  FileText 
+import {
+  CheckCircle,
+  DollarSign,
+  Users,
+  LineChart,
+  Award,
+  FileText
 } from 'lucide-react';
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,11 +16,6 @@ const SellerHub: React.FC = () => {
   return (
     <div className="container mx-auto px-4 py-12">
       <div className="mb-8">
-        <Link href="/">
-          <Button variant="outline" className="mb-4">
-            ← Back to Home
-          </Button>
-        </Link>
         <h1 className="text-3xl font-bold mb-2">Seller Hub</h1>
         <p className="text-gray-600 mb-6">
           Everything you need to know about selling on DasWos
@@ -49,7 +44,7 @@ const SellerHub: React.FC = () => {
       {/* Seller Resources Grid */}
       <h2 className="text-2xl font-bold mb-6">Seller Resources</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
-        
+
         {/* Verification Process */}
         <Card className="border shadow hover:shadow-md transition-shadow">
           <CardContent className="pt-6">
@@ -175,7 +170,7 @@ const SellerHub: React.FC = () => {
       {/* FAQ Section */}
       <div className="max-w-3xl mx-auto mb-8">
         <h2 className="text-2xl font-bold mb-6">Frequently Asked Questions</h2>
-        
+
         <div className="space-y-6">
           <div>
             <h3 className="text-lg font-semibold mb-2">How long does verification take?</h3>

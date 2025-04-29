@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useLocation } from 'wouter';
-import { Search, ArrowLeft } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -169,10 +169,6 @@ const BrowseJobsPage: React.FC = () => {
     setSelectedCategories([]);
   };
 
-  const handleBack = () => {
-    navigate('/enhanced-d-list');
-  };
-
   const handleApply = (jobId: number) => {
     // Implement apply functionality
     console.log(`Applied to job ${jobId}`);
@@ -197,14 +193,8 @@ const BrowseJobsPage: React.FC = () => {
       </Helmet>
 
       <div className="max-w-6xl mx-auto">
-        {/* Header with back button */}
+        {/* Header */}
         <div className="flex items-center mb-6">
-          <button
-            onClick={handleBack}
-            className="mr-3 p-2 rounded-full hover:bg-gray-800 transition-colors"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </button>
           <div className="flex items-center">
             <div className="bg-blue-600 rounded-full h-8 w-8 flex items-center justify-center mr-2">
               <span className="font-bold">J</span>

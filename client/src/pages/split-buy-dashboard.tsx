@@ -140,12 +140,12 @@ const SplitBuyDashboard: React.FC = () => {
   const [, navigate] = useLocation();
   const [splitRequests, setSplitRequests] = useState<SplitBuyRequest[]>([]);
   const [activeTab, setActiveTab] = useState<'active' | 'pending' | 'completed' | 'all'>('active');
-  
+
   useEffect(() => {
     // In a real application, we would fetch the data from the API
     setSplitRequests(MOCK_SPLIT_REQUESTS);
   }, []);
-  
+
   // Filter requests based on active tab
   const filteredRequests = splitRequests.filter(request => {
     if (activeTab === 'all') return true;
@@ -154,17 +154,17 @@ const SplitBuyDashboard: React.FC = () => {
     if (activeTab === 'completed') return ['completed', 'expired', 'cancelled'].includes(request.status);
     return true;
   });
-  
+
   // Format date
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'short', 
-      day: 'numeric' 
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
     });
   };
-  
+
   // Get status badge
   const getStatusBadge = (status: string) => {
     switch(status) {
@@ -182,7 +182,7 @@ const SplitBuyDashboard: React.FC = () => {
         return <Badge variant="outline">{status}</Badge>;
     }
   };
-  
+
   // Get participant initials
   const getInitials = (name: string) => {
     return name.split(' ')
@@ -190,12 +190,12 @@ const SplitBuyDashboard: React.FC = () => {
       .join('')
       .toUpperCase();
   };
-  
+
   // Check if there are any pending invitations for organizer
   const hasPendingInvitations = (request: SplitBuyRequest) => {
     return request.isOrganizer && request.participants.some(p => p.status === 'invited');
   };
-  
+
   if (!user) {
     return (
       <div className="container mx-auto px-4 py-8">
@@ -212,28 +212,20 @@ const SplitBuyDashboard: React.FC = () => {
       </div>
     );
   }
-  
+
   return (
     <div className="container mx-auto px-4 py-8">
-      <div className="flex justify-between items-center mb-6">
-        <Button 
-          variant="ghost" 
-          className="text-gray-600 hover:text-black flex items-center" 
+      <div className="flex items-center mb-6">
+        <Button
+          variant="ghost"
+          className="text-gray-600 hover:text-black flex items-center"
           onClick={() => navigate('/bulk-buy')}
         >
           <ChevronLeft className="h-4 w-4 mr-1" />
-          Back to Bulk Buy
-        </Button>
-        <Button 
-          variant="outline" 
-          className="text-gray-600 hover:text-black flex items-center" 
-          onClick={() => navigate('/')}
-        >
-          <Home className="h-4 w-4 mr-1" />
-          Home
+          BulkBuy
         </Button>
       </div>
-      
+
       <div className="mb-8">
         <h1 className="text-2xl font-bold flex items-center">
           <Split className="mr-2 h-6 w-6" />
@@ -243,7 +235,7 @@ const SplitBuyDashboard: React.FC = () => {
           Manage your group purchases and split requests
         </p>
       </div>
-      
+
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)} className="space-y-4">
         <TabsList className="grid grid-cols-4 w-full max-w-md">
           <TabsTrigger value="active" className="relative">
@@ -265,15 +257,15 @@ const SplitBuyDashboard: React.FC = () => {
           <TabsTrigger value="completed">Completed</TabsTrigger>
           <TabsTrigger value="all">All</TabsTrigger>
         </TabsList>
-        
+
         <div className="mt-4">
           {filteredRequests.length === 0 ? (
             <div className="text-center py-12 border rounded-lg bg-gray-50">
               <Users className="h-12 w-12 mx-auto text-gray-400 mb-3" />
               <h3 className="text-lg font-medium mb-1">No split requests found</h3>
               <p className="text-gray-500 text-sm mb-4">
-                {activeTab === 'all' 
-                  ? "You haven't participated in any split buys yet." 
+                {activeTab === 'all'
+                  ? "You haven't participated in any split buys yet."
                   : `You don't have any ${activeTab} split buys.`}
               </p>
               <Button onClick={() => navigate('/bulk-buy')}>
@@ -289,9 +281,9 @@ const SplitBuyDashboard: React.FC = () => {
                     <div className="flex justify-between items-start">
                       <div className="flex items-center">
                         <div className="h-12 w-12 mr-3 rounded-md overflow-hidden">
-                          <img 
-                            src={request.productImageUrl} 
-                            alt={request.productTitle} 
+                          <img
+                            src={request.productImageUrl}
+                            alt={request.productTitle}
                             className="h-full w-full object-cover"
                           />
                         </div>
@@ -316,7 +308,7 @@ const SplitBuyDashboard: React.FC = () => {
                       </div>
                     </div>
                   </CardHeader>
-                  
+
                   <CardContent className="pt-2">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {/* Left column - Participants */}
@@ -354,18 +346,18 @@ const SplitBuyDashboard: React.FC = () => {
                           ))}
                         </div>
                       </div>
-                      
+
                       {/* Right column - Details */}
                       <div>
                         <h4 className="text-sm font-medium mb-2">Split Buy Details</h4>
                         <div className="grid grid-cols-2 gap-y-1 text-sm">
                           <div className="text-gray-500">Total value:</div>
                           <div className="text-right">{formatPrice(request.totalPrice)}</div>
-                          
+
                           <div className="text-gray-500">Expires on:</div>
                           <div className="text-right">{formatDate(request.expiresAt)}</div>
                         </div>
-                        
+
                         {request.message && (
                           <div className="mt-3 p-2 bg-gray-50 rounded-md text-sm italic text-gray-600">
                             "{request.message}"
@@ -374,53 +366,53 @@ const SplitBuyDashboard: React.FC = () => {
                       </div>
                     </div>
                   </CardContent>
-                  
+
                   <CardFooter className="border-t pt-4 flex-wrap gap-2">
                     {request.status === 'pending' && request.isOrganizer && (
-                      <Button 
-                        variant="default" 
-                        size="sm" 
+                      <Button
+                        variant="default"
+                        size="sm"
                         className="mr-auto"
                       >
                         <UserPlus className="h-4 w-4 mr-2" />
                         Invite More People
                       </Button>
                     )}
-                    
+
                     {request.status === 'pending' && !request.isOrganizer && (
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
+                      <Button
+                        variant="outline"
+                        size="sm"
                         className="text-red-600 hover:text-red-700 hover:bg-red-50 mr-auto"
                       >
                         <UserX className="h-4 w-4 mr-2" />
                         Leave Group
                       </Button>
                     )}
-                    
+
                     {request.status === 'pending' && (
-                      <Button 
-                        variant="outline" 
+                      <Button
+                        variant="outline"
                         size="sm"
                       >
                         <Clock className="h-4 w-4 mr-2" />
                         {request.isOrganizer ? 'Cancel Split Buy' : 'Check Status'}
                       </Button>
                     )}
-                    
+
                     {request.status === 'active' && (
-                      <Button 
-                        variant="default" 
+                      <Button
+                        variant="default"
                         size="sm"
                       >
                         <ShoppingBag className="h-4 w-4 mr-2" />
                         View Order Details
                       </Button>
                     )}
-                    
+
                     {(request.status === 'expired' || request.status === 'completed') && (
-                      <Button 
-                        variant="outline" 
+                      <Button
+                        variant="outline"
                         size="sm"
                       >
                         <ShoppingBag className="h-4 w-4 mr-2" />

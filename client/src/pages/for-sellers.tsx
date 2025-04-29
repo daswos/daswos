@@ -10,11 +10,6 @@ const ForSellers: React.FC = () => {
   return (
     <div className="container mx-auto px-4 py-12">
       <div className="mb-8">
-        <Link href="/">
-          <Button variant="outline" className="mb-4">
-            ← Back to Home
-          </Button>
-        </Link>
         <h1 className="text-3xl font-bold mb-2">For Sellers</h1>
         <p className="text-gray-600 mb-6">
           Join our growing community of trusted sellers
@@ -29,7 +24,7 @@ const ForSellers: React.FC = () => {
             Join DasWos's SafeSphere and gain access to customers who prioritize security and legitimacy.
           </p>
         </div>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <Card className="bg-white shadow-sm border-0">
             <CardContent className="pt-6">
@@ -42,7 +37,7 @@ const ForSellers: React.FC = () => {
               </p>
             </CardContent>
           </Card>
-          
+
           <Card className="bg-white shadow-sm border-0">
             <CardContent className="pt-6">
               <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-4 mx-auto">
@@ -54,7 +49,7 @@ const ForSellers: React.FC = () => {
               </p>
             </CardContent>
           </Card>
-          
+
           <Card className="bg-white shadow-sm border-0">
             <CardContent className="pt-6">
               <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-4 mx-auto">
@@ -67,7 +62,7 @@ const ForSellers: React.FC = () => {
             </CardContent>
           </Card>
         </div>
-        
+
         <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
           <Button variant="outline" size="lg" asChild>
             <Link href="/verification-process">Learn About Verification</Link>
@@ -107,7 +102,7 @@ const ForSellers: React.FC = () => {
               </li>
             </ul>
           </div>
-          
+
           <div className="bg-gray-50 p-6 rounded-lg">
             <h3 className="text-xl font-medium mb-3">Requirements</h3>
             <ul className="space-y-2">

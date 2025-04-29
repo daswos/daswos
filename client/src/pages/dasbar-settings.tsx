@@ -163,14 +163,7 @@ const DasbarSettings = () => {
       <div className="flex justify-center w-full py-8">
         <div className="container max-w-3xl mx-auto px-4">
           <div className="flex items-center mb-6">
-            <Button
-              variant="outline"
-              size="icon"
-              className="mr-4"
-              onClick={() => navigate(-1)}
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
+
             <h1 className="text-2xl font-bold">Customize Dasbar</h1>
           </div>
           <Card>
@@ -189,14 +182,7 @@ const DasbarSettings = () => {
     <div className="flex justify-center w-full py-8">
       <div className="container max-w-3xl mx-auto px-4">
         <div className="flex items-center mb-6">
-          <Button
-            variant="outline"
-            size="icon"
-            className="mr-4"
-            onClick={() => navigate(-1)}
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
+
           <h1 className="text-2xl font-bold">Customize Dasbar</h1>
         </div>
 
@@ -368,7 +354,7 @@ const DasbarSettings = () => {
         <CardHeader>
           <CardTitle>Display Settings</CardTitle>
           <CardDescription>
-            Configure how many items to show directly in the dasbar.
+            Configure how many items to show directly in the dasbar (up to 10).
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -379,7 +365,7 @@ const DasbarSettings = () => {
                 <input
                   type="range"
                   min="3"
-                  max="7"
+                  max="10"
                   value={maxVisibleItems}
                   onChange={(e) => setMaxVisibleItems(parseInt(e.target.value, 10))}
                   className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700"
@@ -394,7 +380,7 @@ const DasbarSettings = () => {
             <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg">
               <h3 className="text-sm font-medium mb-2">Preview:</h3>
               <div className="flex flex-wrap gap-2">
-                {[...Array(7)].map((_, i) => (
+                {[...Array(10)].map((_, i) => (
                   <div
                     key={i}
                     onClick={() => setMaxVisibleItems(i + 1)}
@@ -422,14 +408,7 @@ const DasbarSettings = () => {
         </CardContent>
       </Card>
 
-      <div className="flex justify-between">
-        <Button
-          variant="outline"
-          onClick={() => navigate(-1)}
-        >
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back
-        </Button>
+      <div className="flex justify-end mt-4">
         <div className="space-x-2">
           <Button
             variant="outline"

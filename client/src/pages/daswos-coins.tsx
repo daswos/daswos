@@ -10,7 +10,6 @@ import { useToast } from '@/hooks/use-toast';
 import { DasWosCoinIcon } from '@/components/daswos-coin-icon';
 import { formatDasWosCoins, formatCurrency } from '@/lib/utils';
 import { ChevronRight, Coins, CreditCard, History, RefreshCcw } from 'lucide-react';
-import BackButton from '@/components/back-button';
 
 const DaswosCoinsPage = () => {
   const { user } = useAuth();
@@ -151,9 +150,6 @@ const DaswosCoinsPage = () => {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <div className="flex items-center mb-4">
-        <BackButton fallbackPath="/" />
-      </div>
       <h1 className="text-3xl font-bold mb-8">DasWos Coins Management</h1>
 
       {/* Balance Card */}

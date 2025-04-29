@@ -49,35 +49,94 @@
 /* Make buttons more visible */
 .dasbar button {
   font-weight: 500;
-  transition: background-color 0.2s ease, color 0.2s ease;
-  padding: 8px 12px;
-  margin: 0 5px;
-  border-radius: 6px;
+  transition: all 0.2s ease;
+  padding: 0;
+  margin: 0;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  background-color: #f3f4f6; /* Light gray background */
+}
+
+/* Specific styling for navigation items in the right group */
+.dasbar .nav-item {
+  margin: 0 2px; /* Reduced margin for closer spacing */
+  width: 38px; /* Slightly smaller for tighter grouping */
+  height: 38px; /* Slightly smaller for tighter grouping */
 }
 
 .dasbar button:hover {
   background-color: rgba(0, 0, 0, 0.1);
 }
 
+.dasbar button.active {
+  background-color: #000; /* Black background for active button */
+  color: #fff; /* White text/icon for active button */
+}
+
 .dasbar .container {
   display: flex;
-  justify-content: space-around;
+  justify-content: space-between;
   align-items: center;
   height: 100%;
+  position: relative;
+  width: 100%;
+}
+
+/* Navigation groups styling */
+.dasbar .navigation-group-left {
+  display: flex;
+  align-items: center;
+  position: absolute;
+  left: 5px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 50;
+}
+
+.dasbar .navigation-group-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  gap: 8px; /* Closer spacing between buttons */
+  max-width: 60%;
 }
 
 /* Ensure icons are visible */
 .dasbar svg {
   width: 20px;
   height: 20px;
-  margin-bottom: 2px;
 }
 
-/* Ensure text is visible */
+/* Hide text by default */
 .dasbar button span {
-  font-size: 12px;
-  display: block;
-  margin-top: 2px;
+  position: absolute;
+  top: -25px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+  white-space: nowrap;
+}
+
+/* Show text on hover */
+.dasbar button:hover span {
+  opacity: 1;
+  visibility: visible;
 }
 
 /* Active button styling */
@@ -97,51 +156,128 @@
   border-radius: 3px 3px 0 0;
 }
 
-/* Home button styling */
-.dasbar .home-button {
+/* Navigation buttons styling (home and back) */
+.dasbar .nav-button {
   position: absolute;
-  left: 2px;
   top: 50%;
   transform: translateY(-50%);
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 36px;
-  padding: 0 10px;
-  background-color: #f3f4f6; /* gray-100 */
-  border: 1px solid #d1d5db; /* gray-300 */
-  color: #374151; /* gray-700 */
-  border-radius: 9999px; /* rounded-full */
-  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); /* shadow-sm */
+  height: 40px;
+  width: 40px;
+  padding: 0;
+  border-radius: 50%;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
   transition: all 0.2s ease;
   z-index: 60;
 }
 
+/* Back button styling */
+.dasbar .back-button {
+  left: 5px; /* Position on the far left */
+  background-color: #000000; /* Black background like in the image */
+  border: none;
+  color: #ffffff; /* White text/icon */
+}
+
+.dasbar .back-button:hover {
+  background-color: #333333; /* Slightly lighter black on hover */
+}
+
+.dasbar .back-button .logo-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.3;
+}
+
+/* Forward button styling */
+.dasbar .forward-button {
+  left: 55px; /* Position to the right of the back button */
+  background-color: #000000; /* Black background like the back button */
+  border: none;
+  color: #ffffff; /* White text/icon */
+}
+
+.dasbar .forward-button:hover {
+  background-color: #333333; /* Slightly lighter black on hover */
+}
+
+.dasbar .forward-button .logo-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.3;
+}
+
+/* Home button styling */
+.dasbar .home-button {
+  left: 105px; /* Position to the right of the forward button */
+  background-color: #f3f4f6; /* Light gray background */
+  border: none;
+  color: #374151; /* Dark gray text/icon */
+}
+
 .dasbar .home-button:hover {
-  background-color: #e5e7eb; /* gray-200 */
+  background-color: #e5e7eb; /* Slightly darker gray on hover */
+}
+
+/* Dark mode styles */
+.dark .dasbar .back-button {
+  background-color: #000000; /* Keep black in dark mode */
+  color: #ffffff; /* White text/icon in dark mode */
+}
+
+.dark .dasbar .back-button:hover {
+  background-color: #333333; /* Slightly lighter black on hover in dark mode */
+}
+
+.dark .dasbar .forward-button {
+  background-color: #000000; /* Keep black in dark mode */
+  color: #ffffff; /* White text/icon in dark mode */
+}
+
+.dark .dasbar .forward-button:hover {
+  background-color: #333333; /* Slightly lighter black on hover in dark mode */
 }
 
 .dark .dasbar .home-button {
-  background-color: #374151; /* gray-700 */
-  border-color: #4b5563; /* gray-600 */
-  color: #e5e7eb; /* gray-200 */
+  background-color: #374151; /* Dark gray in dark mode */
+  color: #e5e7eb; /* Light gray text/icon in dark mode */
 }
 
 .dark .dasbar .home-button:hover {
-  background-color: #4b5563; /* gray-600 */
+  background-color: #4b5563; /* Slightly lighter gray on hover in dark mode */
 }
 
-.dark .dasbar .home-button:hover:not(:disabled) {
-  background-color: rgba(255, 215, 0, 0.2); /* Yellow with opacity */
-  color: #ffffff;
-}
-
-/* Responsive adjustments for home button */
+/* Responsive adjustments for navigation buttons */
 @media (max-width: 640px) {
-  .dasbar .home-button {
+  .dasbar .nav-button {
+    height: 36px;
+    width: 36px;
+  }
+
+  .dasbar .navigation-group-left {
     left: 5px;
-    height: 32px;
-    padding: 0 8px;
+  }
+
+  .dasbar .navigation-group-right {
+    right: 5px;
+    gap: 4px; /* Even closer on mobile */
+    max-width: 65%;
+  }
+
+  .dasbar .nav-item {
+    width: 34px; /* Smaller on mobile */
+    height: 34px; /* Smaller on mobile */
+    margin: 0 1px; /* Tighter spacing on mobile */
+  }
+
+  .dasbar button span {
+    font-size: 10px;
+    top: -22px;
+    padding: 2px 6px;
   }
 }
 

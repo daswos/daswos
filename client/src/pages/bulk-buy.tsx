@@ -8,7 +8,6 @@ import SellerCTA from '@/components/seller-cta';
 import ProductTile from '@/components/product-tile';
 import '@/styles/product-tile.css';
 import BulkBuyLogo from '@/components/bulkbuy-logo';
-import BackButton from '@/components/back-button';
 import { Product } from '@shared/schema';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ShoppingBagIcon, AlertCircle, Search, Package, Loader2 } from 'lucide-react';
@@ -171,9 +170,7 @@ const BulkBuy: React.FC = () => {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <div className="flex items-center mb-6">
-        <BackButton fallbackPath="/" />
-      </div>
+
 
       <div className="flex flex-col items-center mb-8">
         <div className="w-full max-w-xl">

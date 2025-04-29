@@ -74,7 +74,7 @@ export const DasbarProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const { user } = useAuth();
   const { toast } = useToast();
   const [items, setItems] = useState<NavigationItem[]>(defaultItems);
-  const [maxVisibleItems, setMaxVisibleItems] = useState<number>(4);
+  const [maxVisibleItems, setMaxVisibleItems] = useState<number>(7); // Default to 7 visible items
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   // Load preferences from API on initial render and when user changes
@@ -190,7 +190,7 @@ export const DasbarProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const resetToDefaults = () => {
     setItems(defaultItems);
-    setMaxVisibleItems(4);
+    setMaxVisibleItems(7); // Reset to 7 visible items by default
   };
 
   return (

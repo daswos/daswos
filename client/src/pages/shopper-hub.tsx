@@ -1,11 +1,11 @@
 import React from 'react';
 import { Link } from 'wouter';
-import { 
-  ShieldCheck, 
-  HelpCircle, 
-  Star, 
-  ShoppingBag, 
-  Flag, 
+import {
+  ShieldCheck,
+  HelpCircle,
+  Star,
+  ShoppingBag,
+  Flag,
   Scale
 } from 'lucide-react';
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
@@ -16,11 +16,6 @@ const ShopperHub: React.FC = () => {
   return (
     <div className="container mx-auto px-4 py-12">
       <div className="mb-8">
-        <Link href="/">
-          <Button variant="outline" className="mb-4">
-            ← Back to Home
-          </Button>
-        </Link>
         <h1 className="text-3xl font-bold mb-2">Shopper Hub</h1>
         <p className="text-gray-600 mb-6">
           Essential resources and information for DasWos shoppers
@@ -49,7 +44,7 @@ const ShopperHub: React.FC = () => {
       {/* Shopper Resources Grid */}
       <h2 className="text-2xl font-bold mb-6">Shopper Resources</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
-        
+
         {/* How It Works */}
         <Card className="border shadow hover:shadow-md transition-shadow">
           <CardContent className="pt-6">
@@ -175,7 +170,7 @@ const ShopperHub: React.FC = () => {
       {/* FAQ Section */}
       <div className="max-w-3xl mx-auto mb-8">
         <h2 className="text-2xl font-bold mb-6">Frequently Asked Questions</h2>
-        
+
         <div className="space-y-6">
           <div>
             <h3 className="text-lg font-semibold mb-2">What is SafeSphere mode?</h3>

@@ -102,6 +102,7 @@ import DaswosCoinsPage from "@/pages/daswos-coins";
 import EnhancedDList from "@/pages/enhanced-d-list";
 import EnhancedArtPage from "@/pages/categories/enhanced-art";
 import BrowseJobsPage from "@/pages/browse-jobs";
+import CartPage from "@/pages/cart";
 
 import GlobalAutoShopTimer from "@/components/global-autoshop-timer";
 import BackspaceTip from "@/components/backspace-tip";
@@ -212,6 +213,7 @@ function Router() {
               <Route path="/features" component={Features} />
               <Route path="/about-us" component={AboutUs} />
               <Route path="/browse-jobs" component={BrowseJobsPage} />
+              <Route path="/cart" component={CartPage} />
 
               {/* Protected routes (require login) */}
               <ProtectedRoute path="/seller-verification" component={SellerVerification} />

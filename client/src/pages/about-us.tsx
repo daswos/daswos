@@ -9,11 +9,6 @@ const AboutUs: React.FC = () => {
   return (
     <div className="container mx-auto px-4 py-12">
       <div className="mb-8">
-        <Link href="/">
-          <Button variant="outline" className="mb-4">
-            ← Back to Home
-          </Button>
-        </Link>
         <h1 className="text-3xl font-bold mb-2">About DasWos</h1>
         <p className="text-gray-600 mb-6">
           Learn about our mission, team, and values
@@ -40,7 +35,7 @@ const AboutUs: React.FC = () => {
       {/* About Resources Grid */}
       <h2 className="text-2xl font-bold mb-6">About DasWos</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
-        
+
         {/* Our Story */}
         <Card className="border shadow hover:shadow-md transition-shadow">
           <CardContent className="pt-6">

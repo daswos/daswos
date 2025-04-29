@@ -35,17 +35,13 @@ const DasbarMoreMenu: React.FC<DasbarMoreMenuProps> = ({ className = '' }) => {
       <DropdownMenuTrigger asChild>
         <button
           className={`
-            flex-1 py-2 mx-1 text-black dark:text-white hover:bg-gray-300 dark:hover:bg-gray-700 transition-colors
-            rounded-lg more-button
+            text-black dark:text-white transition-colors more-button
             ${className}
           `}
+          aria-label="More options"
         >
-          <div className="flex flex-col items-center justify-center">
-            <div className="mb-1">
-              <ChevronsRight className="h-5 w-5" />
-            </div>
-            <span className="text-xs font-medium">More</span>
-          </div>
+          <ChevronsRight className="h-5 w-5" />
+          <span>More</span>
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="center" className="w-48">

@@ -8,11 +8,6 @@ const Shopping: React.FC = () => {
   return (
     <div className="container mx-auto px-4 py-12">
       <div className="mb-8">
-        <Link href="/">
-          <Button variant="outline" className="mb-4">
-            ← Back to Home
-          </Button>
-        </Link>
         <h1 className="text-3xl font-bold mb-2">Shopping Options</h1>
         <p className="text-gray-600 mb-6">
           Explore our various shopping platforms designed for different needs
@@ -37,7 +32,7 @@ const Shopping: React.FC = () => {
             </Button>
           </CardFooter>
         </Card>
-        
+
         <Card>
           <CardHeader className="pb-3">
             <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center mb-2">
@@ -56,7 +51,7 @@ const Shopping: React.FC = () => {
           </CardFooter>
         </Card>
       </div>
-      
+
       <div className="bg-gray-50 rounded-lg p-6 mb-8">
         <h2 className="text-xl font-semibold mb-3">Shopping Features</h2>
         <ul className="list-disc ml-6 space-y-2">
