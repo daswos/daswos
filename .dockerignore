@@ -1,0 +1,15 @@
+node_modules
+npm-debug.log
+.git
+.gitignore
+.env
+.DS_Store
+Dockerfile
+docker-compose.yml
+.replit
+replit.nix
+.devcontainer
+.vscode
+attached_assets
+**/dist
+**/build

@@ -1,0 +1,174 @@
+/* Dasbar styles */
+.dasbar {
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+  height: 60px; /* Slightly taller for better visibility */
+  transition: transform 0.3s ease;
+  /* Position fixed at the bottom with some space */
+  position: fixed !important;
+  bottom: 15px !important;
+  /* Add margin to ensure it's not flush with the edge */
+  margin: 0 auto;
+  /* Add rounded corners for better appearance */
+  border-radius: 12px;
+  /* Limit width for better appearance on large screens */
+  max-width: 800px;
+  /* Center the bar */
+  left: 50% !important;
+  transform: translateX(-50%);
+  /* Add some horizontal padding */
+  padding: 0 10px;
+  /* Ensure it doesn't stretch to the edges on large screens */
+  width: calc(100% - 30px);
+  /* Add a subtle background blur for modern look */
+  backdrop-filter: blur(5px);
+  /* Ensure it's above other content */
+  z-index: 1000;
+}
+
+/* Ensure the dasbar is always visible */
+@media (max-height: 600px) {
+  .dasbar {
+    /* Ensure it's always visible even on very small screens */
+    bottom: 10px !important;
+    height: 55px; /* Slightly smaller on very small screens */
+  }
+}
+
+/* Responsive adjustments for mobile */
+@media (max-width: 640px) {
+  .dasbar {
+    width: calc(100% - 20px);
+    bottom: 10px !important;
+  }
+
+  .dasbar button span {
+    font-size: 11px;
+  }
+}
+
+/* Make buttons more visible */
+.dasbar button {
+  font-weight: 500;
+  transition: background-color 0.2s ease, color 0.2s ease;
+  padding: 8px 12px;
+  margin: 0 5px;
+  border-radius: 6px;
+}
+
+.dasbar button:hover {
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.dasbar .container {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  height: 100%;
+}
+
+/* Ensure icons are visible */
+.dasbar svg {
+  width: 20px;
+  height: 20px;
+  margin-bottom: 2px;
+}
+
+/* Ensure text is visible */
+.dasbar button span {
+  font-size: 12px;
+  display: block;
+  margin-top: 2px;
+}
+
+/* Active button styling */
+.dasbar button.active {
+  position: relative;
+}
+
+.dasbar button.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 40%;
+  height: 3px;
+  background-color: currentColor;
+  border-radius: 3px 3px 0 0;
+}
+
+/* Home button styling */
+.dasbar .home-button {
+  position: absolute;
+  left: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  padding: 0 10px;
+  background-color: #f3f4f6; /* gray-100 */
+  border: 1px solid #d1d5db; /* gray-300 */
+  color: #374151; /* gray-700 */
+  border-radius: 9999px; /* rounded-full */
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); /* shadow-sm */
+  transition: all 0.2s ease;
+  z-index: 60;
+}
+
+.dasbar .home-button:hover {
+  background-color: #e5e7eb; /* gray-200 */
+}
+
+.dark .dasbar .home-button {
+  background-color: #374151; /* gray-700 */
+  border-color: #4b5563; /* gray-600 */
+  color: #e5e7eb; /* gray-200 */
+}
+
+.dark .dasbar .home-button:hover {
+  background-color: #4b5563; /* gray-600 */
+}
+
+.dark .dasbar .home-button:hover:not(:disabled) {
+  background-color: rgba(255, 215, 0, 0.2); /* Yellow with opacity */
+  color: #ffffff;
+}
+
+/* Responsive adjustments for home button */
+@media (max-width: 640px) {
+  .dasbar .home-button {
+    left: 5px;
+    height: 32px;
+    padding: 0 8px;
+  }
+}
+
+/* More button styling */
+.dasbar .more-button {
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.dasbar .more-button svg {
+  color: #4b5563; /* gray-600 */
+}
+
+.dark .dasbar .more-button svg {
+  color: #e5e7eb; /* gray-200 */
+}
+
+.dasbar .more-button:hover svg {
+  transform: translateX(2px);
+}
+
+/* Dark mode hover for buttons */
+.dark .dasbar button:hover {
+  background-color: rgba(255, 215, 0, 0.2); /* Yellow with opacity */
+}
+
+/* Dark mode adjustments */
+.dark .dasbar {
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.3);
+}

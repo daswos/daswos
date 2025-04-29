@@ -1,0 +1,23 @@
+# These owners will be the default owners for everything in
+# the repo. Unless a later match takes precedence, they will
+# be requested for review when someone opens a pull request.
+* @your-username/tech-leads
+
+# Frontend code owners
+/client/ @your-username/frontend-team
+
+# Backend code owners
+/server/ @your-username/backend-team
+
+# Shared code owners
+/shared/ @your-username/full-stack-team
+
+# DevOps and infrastructure code owners
+/docker* @your-username/devops-team
+/.github/ @your-username/devops-team
+/.devcontainer/ @your-username/devops-team
+
+# Configuration file owners
+*.json @your-username/lead-developers
+*.ts @your-username/lead-developers
+*.js @your-username/lead-developers
