@@ -20,8 +20,10 @@ import {
   orderItems, type OrderItem, type InsertOrderItem,
   daswosAiChats, type DaswosAiChat, type InsertDaswosAiChat,
   daswosAiChatMessages, type DaswosAiChatMessage, type InsertDaswosAiChatMessage,
-  daswosAiSources, type DaswosAiSource, type InsertDaswosAiSource
+  daswosAiSources, type DaswosAiSource, type InsertDaswosAiSource,
+  familyInvitationCodes, type FamilyInvitationCode, type InsertFamilyInvitationCode
 } from "@shared/schema";
+import { userSubscriptions, type UserSubscription, type InsertUserSubscription } from "@shared/user-subscriptions";
 import connectPg from "connect-pg-simple";
 import session from "express-session";
 import memorystore from "memorystore";
@@ -46,6 +48,19 @@ export interface IStorage {
   checkUserHasSubscription(userId: number): Promise<boolean>;
   getUserSubscriptionDetails(userId: number): Promise<{hasSubscription: boolean, type?: string, expiresAt?: Date}>;
   updateUserSellerStatus(userId: number, isSeller: boolean): Promise<boolean>;
+
+  // Stripe subscription operations
+  createStripeSubscription(userId: number, stripeCustomerId: string, stripeSubscriptionId: string, subscriptionType: string, billingCycle: string): Promise<UserSubscription>;
+  updateStripeSubscription(userId: number, stripeSubscriptionId: string, status: string): Promise<UserSubscription | undefined>;
+  getStripeSubscription(userId: number): Promise<UserSubscription | undefined>;
+
+  // Family account operations
+  createFamilyInvitationCode(ownerId: number, email?: string, expiresInDays?: number): Promise<FamilyInvitationCode>;
+  getFamilyInvitationByCode(code: string): Promise<FamilyInvitationCode | undefined>;
+  getFamilyInvitationsByOwner(ownerId: number): Promise<FamilyInvitationCode[]>;
+  markFamilyInvitationAsUsed(code: string, userId: number): Promise<boolean>;
+  getFamilyMembers(ownerId: number): Promise<User[]>;
+  updateFamilyMemberSettings(ownerId: number, memberId: number, settings: any): Promise<boolean>;
 
   // Family account operations
   addFamilyMember(ownerUserId: number, email: string): Promise<{ success: boolean, message: string }>;
@@ -215,6 +230,12 @@ export interface IStorage {
   getRecentChatMessage(chatId: number): Promise<DaswosAiChatMessage | undefined>;
   addMessageSource(sourceData: InsertDaswosAiSource): Promise<DaswosAiSource>;
   getMessageSources(messageId: number): Promise<DaswosAiSource[]>;
+
+  // User Settings operations
+  getDasbarSettings(userId: number): Promise<any>;
+  updateDasbarSettings(settings: any): Promise<any>;
+  getUserDasbarPreferences(userId: number): Promise<any>;
+  saveUserDasbarPreferences(userId: number, items: any[], maxVisibleItems: number): Promise<any>;
 }
 
 // Database storage implementation
@@ -316,8 +337,8 @@ export class DatabaseStorage implements IStorage {
     const expiresAt = new Date(now);
     expiresAt.setMonth(now.getMonth() + durationMonths);
 
-    // Set isFamilyOwner flag for family subscriptions
-    const isFamilyOwner = subscriptionType === 'family';
+    // Set isFamilyOwner flag for family or unlimited subscriptions
+    const isFamilyOwner = subscriptionType === 'family' || subscriptionType === 'unlimited';
 
     console.log(`Updating subscription for user ID=${userId}: type=${subscriptionType}, isFamilyOwner=${isFamilyOwner}`);
 
@@ -335,6 +356,121 @@ export class DatabaseStorage implements IStorage {
     console.log(`User subscription updated: ID=${user.id}, type=${user.subscriptionType}, isFamilyOwner=${user.isFamilyOwner}`);
 
     return user;
+  }
+
+  // Stripe subscription operations
+  async createStripeSubscription(
+    userId: number,
+    stripeCustomerId: string,
+    stripeSubscriptionId: string,
+    subscriptionType: string,
+    billingCycle: string
+  ): Promise<UserSubscription> {
+    // First, check if a subscription already exists for this user
+    const existingSubscription = await this.getStripeSubscription(userId);
+
+    if (existingSubscription) {
+      // Update the existing subscription
+      const [subscription] = await db
+        .update(userSubscriptions)
+        .set({
+          stripeCustomerId,
+          stripeSubscriptionId,
+          subscriptionType,
+          billingCycle,
+          status: 'active',
+          updatedAt: new Date()
+        })
+        .where(eq(userSubscriptions.userId, userId))
+        .returning();
+
+      return subscription;
+    }
+
+    // Create a new subscription record
+    const [subscription] = await db
+      .insert(userSubscriptions)
+      .values({
+        userId,
+        stripeCustomerId,
+        stripeSubscriptionId,
+        subscriptionType,
+        billingCycle,
+        status: 'active',
+        currentPeriodStart: new Date(),
+        // For monthly, add 1 month; for annual, add 1 year
+        currentPeriodEnd: billingCycle === 'monthly'
+          ? new Date(new Date().setMonth(new Date().getMonth() + 1))
+          : new Date(new Date().setFullYear(new Date().getFullYear() + 1)),
+        cancelAtPeriodEnd: false,
+        metadata: {}
+      })
+      .returning();
+
+    // Also update the user record
+    await this.updateUserSubscription(
+      userId,
+      subscriptionType,
+      billingCycle === 'monthly' ? 1 : 12
+    );
+
+    return subscription;
+  }
+
+  async updateStripeSubscription(
+    userId: number,
+    stripeSubscriptionId: string,
+    status: string
+  ): Promise<UserSubscription | undefined> {
+    // Find the subscription
+    const [subscription] = await db
+      .select()
+      .from(userSubscriptions)
+      .where(
+        and(
+          eq(userSubscriptions.userId, userId),
+          eq(userSubscriptions.stripeSubscriptionId, stripeSubscriptionId)
+        )
+      );
+
+    if (!subscription) {
+      return undefined;
+    }
+
+    // Update the subscription status
+    const [updatedSubscription] = await db
+      .update(userSubscriptions)
+      .set({
+        status,
+        updatedAt: new Date(),
+        // If canceled, set canceledAt
+        ...(status === 'canceled' ? { canceledAt: new Date() } : {})
+      })
+      .where(eq(userSubscriptions.id, subscription.id))
+      .returning();
+
+    // If subscription is canceled, update the user record
+    if (status === 'canceled') {
+      await db
+        .update(users)
+        .set({
+          hasSubscription: false,
+          subscriptionType: 'limited', // Downgrade to free tier
+          subscriptionExpiresAt: subscription.currentPeriodEnd // Will expire at the end of the current period
+        })
+        .where(eq(users.id, userId));
+    }
+
+    return updatedSubscription;
+  }
+
+  async getStripeSubscription(userId: number): Promise<UserSubscription | undefined> {
+    const [subscription] = await db
+      .select()
+      .from(userSubscriptions)
+      .where(eq(userSubscriptions.userId, userId));
+
+    return subscription;
   }
 
   async checkUserHasSubscription(userId: number): Promise<boolean> {
@@ -2803,6 +2939,289 @@ export class DatabaseStorage implements IStorage {
       return [];
     }
   }
+
+  // Family invitation code operations
+  async createFamilyInvitationCode(ownerId: number, email?: string, expiresInDays: number = 7): Promise<FamilyInvitationCode> {
+    try {
+      // Generate a random 8-character code
+      const code = Math.random().toString(36).substring(2, 10).toUpperCase();
+
+      // Set expiration date
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + expiresInDays);
+
+      // Create the invitation code
+      const [invitation] = await db.insert(familyInvitationCodes).values({
+        code,
+        ownerUserId: ownerId,
+        email,
+        expiresAt,
+        isUsed: false
+      }).returning();
+
+      return invitation;
+    } catch (error) {
+      console.error("Error creating family invitation code:", error);
+      throw error;
+    }
+  }
+
+  async getFamilyInvitationByCode(code: string): Promise<FamilyInvitationCode | undefined> {
+    try {
+      const [invitation] = await db
+        .select()
+        .from(familyInvitationCodes)
+        .where(eq(familyInvitationCodes.code, code));
+
+      return invitation;
+    } catch (error) {
+      console.error("Error getting family invitation by code:", error);
+      throw error;
+    }
+  }
+
+  async getFamilyInvitationsByOwner(ownerId: number): Promise<FamilyInvitationCode[]> {
+    try {
+      return await db
+        .select()
+        .from(familyInvitationCodes)
+        .where(eq(familyInvitationCodes.ownerUserId, ownerId));
+    } catch (error) {
+      console.error("Error getting family invitations by owner:", error);
+      throw error;
+    }
+  }
+
+  async markFamilyInvitationAsUsed(code: string, userId: number): Promise<boolean> {
+    try {
+      const [invitation] = await db
+        .update(familyInvitationCodes)
+        .set({
+          isUsed: true,
+          usedByUserId: userId
+        })
+        .where(eq(familyInvitationCodes.code, code))
+        .returning();
+
+      return !!invitation;
+    } catch (error) {
+      console.error("Error marking family invitation as used:", error);
+      throw error;
+    }
+  }
+
+  async updateFamilyMemberSettings(ownerId: number, memberId: number, settings: any): Promise<boolean> {
+    try {
+      // First verify that the ownerId is the family owner of memberId
+      const member = await this.getUser(memberId);
+      if (!member || member.familyOwnerId !== ownerId) {
+        return false;
+      }
+
+      // Update the member's settings
+      await db
+        .update(users)
+        .set(settings)
+        .where(eq(users.id, memberId));
+
+      return true;
+    } catch (error) {
+      console.error("Error updating family member settings:", error);
+      return false;
+    }
+  }
+
+  // User Settings operations
+  async getDasbarSettings(userId: number): Promise<any> {
+    try {
+      // First check if we have settings stored in app_settings
+      const key = `user_${userId}_dasbar_settings`;
+      const [settings] = await db.select()
+        .from(appSettings)
+        .where(eq(appSettings.key, key));
+
+      if (settings) {
+        return settings.value;
+      }
+
+      // Return default settings if none found
+      return {
+        enabled: true,
+        autoRefresh: false,
+        refreshInterval: 30,
+        notifications: true
+      };
+    } catch (error) {
+      console.error("Error getting DasBar settings:", error);
+      // Return default settings on error
+      return {
+        enabled: true,
+        autoRefresh: false,
+        refreshInterval: 30,
+        notifications: true
+      };
+    }
+  }
+
+  async updateDasbarSettings(settings: any): Promise<any> {
+    try {
+      const { userId, ...settingsData } = settings;
+      const key = `user_${userId}_dasbar_settings`;
+
+      // Check if settings already exist
+      const [existingSettings] = await db.select()
+        .from(appSettings)
+        .where(eq(appSettings.key, key));
+
+      if (existingSettings) {
+        // Update existing settings
+        await db.update(appSettings)
+          .set({
+            value: settingsData,
+            updatedAt: new Date()
+          })
+          .where(eq(appSettings.key, key));
+      } else {
+        // Create new settings
+        await db.insert(appSettings)
+          .values({
+            key,
+            value: settingsData,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          });
+      }
+
+      return settingsData;
+    } catch (error) {
+      console.error("Error updating DasBar settings:", error);
+      throw error;
+    }
+  }
+
+
+
+  // User session methods
+  async createUserSession(sessionData: {
+    userId: number;
+    sessionToken: string;
+    deviceInfo: any;
+    expiresAt: Date;
+  }) {
+    try {
+      console.log('Creating user session for user ID:', sessionData.userId);
+
+      // Check if the sessions table exists
+      try {
+        await db.execute(sql`
+          CREATE TABLE IF NOT EXISTS user_sessions (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            session_token TEXT NOT NULL,
+            device_info JSONB,
+            is_active BOOLEAN DEFAULT TRUE,
+            expires_at TIMESTAMP WITH TIME ZONE,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+          )
+        `);
+      } catch (tableError) {
+        console.error('Error creating sessions table:', tableError);
+        // Continue anyway, as the table might already exist
+      }
+
+      // Insert the session into the database
+      try {
+        const [session] = await db.execute(sql`
+          INSERT INTO user_sessions (
+            user_id,
+            session_token,
+            device_info,
+            is_active,
+            expires_at
+          )
+          VALUES (
+            ${sessionData.userId},
+            ${sessionData.sessionToken},
+            ${JSON.stringify(sessionData.deviceInfo)},
+            TRUE,
+            ${sessionData.expiresAt}
+          )
+          RETURNING *
+        `);
+
+        return session || { id: 1, ...sessionData };
+      } catch (insertError) {
+        console.error('Error inserting session:', insertError);
+        // Return a mock session if database insert fails
+        return { id: 1, ...sessionData };
+      }
+    } catch (error) {
+      console.error('Error in createUserSession:', error);
+      // Return a mock session as fallback
+      return { id: 1, ...sessionData };
+    }
+  }
+
+  async getUserSessions(userId: number | null) {
+    try {
+      console.log('Getting user sessions for user ID:', userId);
+
+      // If userId is null, return all sessions (for token validation)
+      if (userId === null) {
+        const sessions = await db.execute(sql`
+          SELECT * FROM user_sessions
+          WHERE is_active = TRUE AND expires_at > NOW()
+        `);
+        return sessions || [];
+      }
+
+      // Get sessions for a specific user
+      const sessions = await db.execute(sql`
+        SELECT * FROM user_sessions
+        WHERE user_id = ${userId} AND is_active = TRUE
+        ORDER BY created_at DESC
+      `);
+
+      return sessions || [];
+    } catch (error) {
+      console.error('Error getting user sessions:', error);
+      return [];
+    }
+  }
+
+  async deactivateSession(sessionToken: string) {
+    try {
+      console.log('Deactivating session:', sessionToken);
+
+      await db.execute(sql`
+        UPDATE user_sessions
+        SET is_active = FALSE
+        WHERE session_token = ${sessionToken}
+      `);
+
+      return true;
+    } catch (error) {
+      console.error('Error deactivating session:', error);
+      return false;
+    }
+  }
+
+  async deactivateAllUserSessions(userId: number) {
+    try {
+      console.log('Deactivating all sessions for user ID:', userId);
+
+      await db.execute(sql`
+        UPDATE user_sessions
+        SET is_active = FALSE
+        WHERE user_id = ${userId}
+      `);
+
+      return true;
+    } catch (error) {
+      console.error('Error deactivating all user sessions:', error);
+      return false;
+    }
+  }
 }
 
 const databaseStorage = new DatabaseStorage();
@@ -2810,7 +3229,7 @@ const memoryStorageInstance = memoryStorage;
 
 // Create a hybrid storage instance using PostgreSQL for production
 // Only falling back to memory in development mode
-export const storage = new HybridStorage(databaseStorage, memoryStorageInstance);
+export const storage = new HybridStorage();
 
 // Log storage configuration
 if (process.env.NODE_ENV === 'production') {
@@ -2818,3 +3237,4 @@ if (process.env.NODE_ENV === 'production') {
 } else {
   log('Development mode active: Primary storage is PostgreSQL with memory fallback', 'info');
 }
+

@@ -60,15 +60,18 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { AuthProvider } from "@/hooks/use-auth";
 import { AdminSettingsProvider } from "@/hooks/use-admin-settings";
 import SafeSphereProvider from "@/contexts/safe-sphere-context";
+import SuperSafeProvider from "@/contexts/super-safe-context";
 import { AutoShopProvider } from "@/contexts/autoshop-context";
 import { DasbarProvider } from "@/contexts/dasbar-context";
 import { ThemeProvider } from "@/providers/theme-provider";
-import { ProtectedRoute, ProtectedSubscriptionRoute } from "./lib/protected-route";
+import { ProtectedRoute, ProtectedSubscriptionRoute, ProtectedUnlimitedSubscriptionRoute } from "./lib/protected-route";
 // Using the built-in toast system
 
 import MyListingsPage from "@/pages/my-listings";
 import MyOrders from "@/pages/my-orders";
 import DasbarSettings from "@/pages/dasbar-settings";
+import UserSettings from "@/pages/user-settings";
+import SuperSafeSettingsPage from "@/pages/super-safe-settings";
 
 // Import category pages
 import ArtPage from "@/pages/categories/art";
@@ -224,12 +227,14 @@ function Router() {
               <ProtectedRoute path="/daswos-coins" component={DaswosCoinsPage} />
               <ProtectedRoute path="/my-orders" component={MyOrders} />
               <ProtectedRoute path="/dasbar-settings" component={DasbarSettings} />
+              <ProtectedRoute path="/user-settings" component={UserSettings} />
+              <ProtectedRoute path="/super-safe-settings" component={SuperSafeSettingsPage} />
 
               {/* Subscription protected routes (require login + subscription) */}
               <ProtectedSubscriptionRoute path="/bulk-buy-agent" component={BulkBuyAgent} />
               <Route path="/ai-assistant" component={AIAssistant} /> {/* Made accessible without login */}
               <ProtectedRoute path="/ai-search" component={AiSearch} />
-              <Route path="/daswos-ai" component={DaswosAi} />
+              <ProtectedUnlimitedSubscriptionRoute path="/daswos-ai" component={DaswosAi} />
               <Route path="/admin-login" component={AdminLogin} />
               <Route path="/admin" component={AdminPanel} />
 
@@ -264,14 +269,16 @@ function App() {
         <AuthProvider>
           <AdminSettingsProvider>
             <SafeSphereProvider>
-              <AutoShopProvider>
-                <DasbarProvider>
-                  <Router />
-                  <GlobalAutoShopTimer />
-                  <BackspaceTip />
-                  <Toaster />
-                </DasbarProvider>
-              </AutoShopProvider>
+              <SuperSafeProvider>
+                <AutoShopProvider>
+                  <DasbarProvider>
+                    <Router />
+                    <GlobalAutoShopTimer />
+                    <BackspaceTip />
+                    <Toaster />
+                  </DasbarProvider>
+                </AutoShopProvider>
+              </SuperSafeProvider>
             </SafeSphereProvider>
           </AdminSettingsProvider>
         </AuthProvider>

@@ -2,6 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Import custom styles */
+@import url('./styles/select-fix.css');
+
 /* Global padding for dasbar */
 .page-content {
   padding-bottom: 80px !important; /* Ensure content isn't hidden behind the dasbar */

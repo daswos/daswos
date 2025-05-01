@@ -13,7 +13,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Users, Split, ShieldCheck, Check, X, UserPlus, UserCheck } from 'lucide-react';
+import { Users, ShieldCheck, Check, X, UserPlus, UserCheck } from 'lucide-react';
+import SplitBuyIcon from '@/components/icons/split-buy-icon';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Product } from '@shared/schema';
 import { formatPrice } from '@/lib/utils';
@@ -85,9 +86,9 @@ const MOCK_SPLIT_OFFERS: SplitOffer[] = [
   }
 ];
 
-const SplitBulkBuyModal: React.FC<SplitBulkBuyModalProps> = ({ 
-  product, 
-  buttonClassName = "" 
+const SplitBulkBuyModal: React.FC<SplitBulkBuyModalProps> = ({
+  product,
+  buttonClassName = ""
 }) => {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
@@ -101,19 +102,19 @@ const SplitBulkBuyModal: React.FC<SplitBulkBuyModalProps> = ({
 
   // Filter offers for current product
   const [availableOffers, setAvailableOffers] = useState<SplitOffer[]>([]);
-  
+
   useEffect(() => {
     // In a real app, we would fetch this from API
     // Filtering offers for the current product
     setAvailableOffers(MOCK_SPLIT_OFFERS.filter(offer => offer.productId === product.id));
   }, [product.id]);
-  
+
   const minQuantity = product.bulkMinimumQuantity || 10;
   const discountRate = product.bulkDiscountRate || 15;
   const perPersonPrice = (product.price * minQuantity) / parseInt(participants);
   const negotiationFee = perPersonPrice * 0.03; // 3% negotiation fee
   const totalPerPerson = perPersonPrice + negotiationFee;
-  
+
   const handleCreateSplit = async () => {
     if (!email) {
       toast({
@@ -123,14 +124,14 @@ const SplitBulkBuyModal: React.FC<SplitBulkBuyModalProps> = ({
       });
       return;
     }
-    
+
     setIsLoading(true);
-    
+
     // Simulate API call
     setTimeout(() => {
       setIsLoading(false);
       setOpen(false);
-      
+
       toast({
         title: "Split Bulk Buy initiated!",
         description: "We've created your group buy. Invitations have been sent to potential participants.",
@@ -141,29 +142,29 @@ const SplitBulkBuyModal: React.FC<SplitBulkBuyModalProps> = ({
   const handleJoinSplit = (offerId: string) => {
     setSelectedOfferId(offerId);
     setIsJoining(true);
-    
+
     // Simulate API call
     setTimeout(() => {
       setIsJoining(false);
       setOpen(false);
-      
+
       toast({
         title: "Successfully joined group buy!",
         description: "You've joined the split purchase. We'll notify you when the group is complete.",
       });
     }, 1500);
   };
-  
+
   // Format date to readable format
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'short', 
-      day: 'numeric' 
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
     });
   };
-  
+
   // Gets initials from name
   const getInitials = (name: string) => {
     return name.split(' ')
@@ -171,15 +172,15 @@ const SplitBulkBuyModal: React.FC<SplitBulkBuyModalProps> = ({
       .join('')
       .toUpperCase();
   };
-  
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button 
-          variant="outline" 
+        <Button
+          variant="outline"
           className={`flex items-center ${buttonClassName}`}
         >
-          <Split className="w-4 h-4 mr-2" />
+          <SplitBuyIcon className="w-4 h-4 mr-2" />
           Split Bulk Buy
         </Button>
       </DialogTrigger>
@@ -194,7 +195,7 @@ const SplitBulkBuyModal: React.FC<SplitBulkBuyModalProps> = ({
           <X className="h-4 w-4" />
           <span className="sr-only">Close</span>
         </DialogClose>
-        
+
         <Tabs defaultValue="create" value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="create">Create New Split</TabsTrigger>
@@ -207,7 +208,7 @@ const SplitBulkBuyModal: React.FC<SplitBulkBuyModalProps> = ({
               )}
             </TabsTrigger>
           </TabsList>
-          
+
           {/* Create New Split Tab */}
           <TabsContent value="create" className="space-y-3 mt-3">
             <div className="bg-blue-50 p-3 rounded-md text-blue-800 text-xs sm:text-sm">
@@ -219,31 +220,31 @@ const SplitBulkBuyModal: React.FC<SplitBulkBuyModalProps> = ({
               <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-xs">
                 <div>Original price per item:</div>
                 <div className="text-right font-medium">{formatPrice(product.price)}</div>
-                
+
                 <div>Minimum quantity:</div>
                 <div className="text-right font-medium">{minQuantity} items</div>
-                
+
                 <div>Bulk discount:</div>
                 <div className="text-right font-medium text-green-600">-{discountRate}%</div>
-                
+
                 <div className="text-blue-900">Number of participants:</div>
                 <div className="text-right font-medium text-blue-900">{participants} people</div>
-                
+
                 <div className="border-t border-blue-200 pt-1 font-medium">Cost per participant:</div>
                 <div className="border-t border-blue-200 pt-1 text-right font-medium">{formatPrice(perPersonPrice)}</div>
-                
+
                 <div className="text-xs font-medium">Negotiation fee (3%):</div>
                 <div className="text-right text-xs font-medium">{formatPrice(negotiationFee)}</div>
-                
+
                 <div className="text-blue-900 font-bold">Total per person:</div>
                 <div className="text-right text-blue-900 font-bold">{formatPrice(totalPerPerson)}</div>
               </div>
             </div>
-            
+
             <div className="space-y-1.5">
               <Label htmlFor="participants" className="text-xs sm:text-sm">Number of participants</Label>
-              <Select 
-                value={participants} 
+              <Select
+                value={participants}
                 onValueChange={setParticipants}
               >
                 <SelectTrigger id="participants" className="text-xs sm:text-sm h-8 sm:h-10">
@@ -258,7 +259,7 @@ const SplitBulkBuyModal: React.FC<SplitBulkBuyModalProps> = ({
                 </SelectContent>
               </Select>
             </div>
-            
+
             <div className="space-y-1.5">
               <Label htmlFor="email" className="text-xs sm:text-sm">Your email address</Label>
               <Input
@@ -270,7 +271,7 @@ const SplitBulkBuyModal: React.FC<SplitBulkBuyModalProps> = ({
                 className="text-xs sm:text-sm h-8 sm:h-10"
               />
             </div>
-            
+
             <div className="space-y-1.5">
               <Label htmlFor="message" className="text-xs sm:text-sm">Message to participants (optional)</Label>
               <Input
@@ -281,7 +282,7 @@ const SplitBulkBuyModal: React.FC<SplitBulkBuyModalProps> = ({
                 className="text-xs sm:text-sm h-8 sm:h-10"
               />
             </div>
-            
+
             <div className="bg-green-50 p-2 rounded-md text-xs sm:text-sm text-green-800 flex items-start">
               <ShieldCheck className="h-4 w-4 mr-1.5 text-green-600 flex-shrink-0 mt-0.5" />
               <div>
@@ -289,7 +290,7 @@ const SplitBulkBuyModal: React.FC<SplitBulkBuyModalProps> = ({
                 <p className="mt-0.5 text-xs leading-tight">Funds are only collected if enough participants join. No payment is processed until the target is reached.</p>
               </div>
             </div>
-            
+
             <div className="flex justify-end space-x-2 pt-2">
               <DialogClose asChild>
                 <Button variant="outline" size="sm" className="text-xs">Cancel</Button>
@@ -299,7 +300,7 @@ const SplitBulkBuyModal: React.FC<SplitBulkBuyModalProps> = ({
               </Button>
             </div>
           </TabsContent>
-          
+
           {/* Join Existing Split Tab */}
           <TabsContent value="join" className="mt-4">
             {availableOffers.length === 0 ? (
@@ -316,7 +317,7 @@ const SplitBulkBuyModal: React.FC<SplitBulkBuyModalProps> = ({
                 <p className="text-sm text-gray-600">
                   These users are looking for others to join their bulk buy. Join them to split the cost!
                 </p>
-                
+
                 <div className="space-y-3">
                   {availableOffers.map((offer) => (
                     <Card key={offer.id} className={`border ${selectedOfferId === offer.id ? 'border-blue-500 shadow-md' : 'border-gray-200'}`}>
@@ -345,14 +346,14 @@ const SplitBulkBuyModal: React.FC<SplitBulkBuyModalProps> = ({
                           <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-xs">
                             <div className="text-gray-500">Price per person:</div>
                             <div className="text-right font-semibold">{formatPrice(offer.pricePerPerson)}</div>
-                            
+
                             <div className="text-gray-500">Negotiation fee:</div>
                             <div className="text-right">{formatPrice(offer.negotiationFee)}</div>
-                            
+
                             <div className="text-gray-500 font-semibold">Total cost:</div>
                             <div className="text-right font-semibold">{formatPrice(offer.pricePerPerson + offer.negotiationFee)}</div>
                           </div>
-                          
+
                           {offer.message && (
                             <div className="mt-2 text-xs italic text-gray-600 border-t pt-2">
                               "{offer.message}"
@@ -361,8 +362,8 @@ const SplitBulkBuyModal: React.FC<SplitBulkBuyModalProps> = ({
                         </div>
                       </CardContent>
                       <CardFooter className="pt-0 px-3 pb-3">
-                        <Button 
-                          onClick={() => handleJoinSplit(offer.id)} 
+                        <Button
+                          onClick={() => handleJoinSplit(offer.id)}
                           disabled={isJoining && selectedOfferId === offer.id}
                           className="w-full text-xs sm:text-sm"
                           variant={selectedOfferId === offer.id ? "default" : "outline"}
@@ -381,7 +382,7 @@ const SplitBulkBuyModal: React.FC<SplitBulkBuyModalProps> = ({
                     </Card>
                   ))}
                 </div>
-                
+
                 <div className="pt-4">
                   <Button
                     variant="outline"

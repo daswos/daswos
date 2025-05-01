@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { AlertCircle, Check, Clock, Users, UserX, UserPlus, ShoppingBag, Split, Package, ChevronLeft, Home } from 'lucide-react';
+import { AlertCircle, Check, Clock, Users, UserX, UserPlus, ShoppingBag, Package, ChevronLeft, Home } from 'lucide-react';
+import SplitBuyIcon from '@/components/icons/split-buy-icon';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
 import { formatPrice } from '@/lib/utils';
@@ -228,7 +229,7 @@ const SplitBuyDashboard: React.FC = () => {
 
       <div className="mb-8">
         <h1 className="text-2xl font-bold flex items-center">
-          <Split className="mr-2 h-6 w-6" />
+          <SplitBuyIcon className="mr-2 h-6 w-6" />
           Your Split Buy Dashboard
         </h1>
         <p className="text-gray-600 mt-1">

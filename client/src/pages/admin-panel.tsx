@@ -6,7 +6,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertCircle, CheckCircle, XCircle, User, Building2, Phone, Mail, Globe, Calendar, Info, Image } from "lucide-react";
+import { AlertCircle, CheckCircle, XCircle, User, Building2, Phone, Mail, Globe, Calendar, Info, Image, LogOut as LogOutIcon } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -17,13 +17,26 @@ import PhotoVerificationPanel from "@/components/admin/photo-verification-panel"
 // Default message templates for feature explanations
 const SAFESPHERE_DEV_MESSAGE = "This is a development version of SafeSphere. Data is being collected via OpenSphere for development purposes.";
 const AI_SHOPPER_DEV_MESSAGE = "This is a development version of Daswos AI. Features may be limited and recommendations are for testing only.";
+const SUBSCRIPTION_DEV_MESSAGE = "Subscriptions are currently in development mode. All premium features are available to all users without requiring a subscription.";
+const SUPERSAFE_DEV_MESSAGE = "SuperSafe mode is currently in development. All protection features are enabled for testing purposes.";
 
 interface AppSettings {
   paidFeaturesEnabled: boolean;
+  // Development mode toggles
   safesphereDevMode: boolean;
   aiShopperDevMode: boolean;
+  subscriptionDevMode: boolean;
+  superSafeDevMode: boolean;
+  debugMode: boolean; // Debug info toggle
+  // Feature visibility toggles
+  safesphereEnabled: boolean;
+  aiShopperEnabled: boolean;
+  superSafeEnabled: boolean;
+  // Development messages
   safesphereDevMessage: string;
   aiShopperDevMessage: string;
+  subscriptionDevMessage: string;
+  superSafeDevMessage: string;
 }
 
 interface SellerVerification {
@@ -51,10 +64,21 @@ export default function AdminPanel() {
   const [, setLocation] = useLocation();
   const [settings, setSettings] = useState<AppSettings>({
     paidFeaturesEnabled: false, // We'll invert this when saving since backend uses paidFeaturesDisabled
+    // Development mode toggles
     safesphereDevMode: false,
     aiShopperDevMode: false,
+    subscriptionDevMode: false,
+    superSafeDevMode: false,
+    debugMode: false, // Debug info toggle
+    // Feature visibility toggles
+    safesphereEnabled: true,
+    aiShopperEnabled: true,
+    superSafeEnabled: true,
+    // Development messages
     safesphereDevMessage: SAFESPHERE_DEV_MESSAGE,
-    aiShopperDevMessage: AI_SHOPPER_DEV_MESSAGE
+    aiShopperDevMessage: AI_SHOPPER_DEV_MESSAGE,
+    subscriptionDevMessage: SUBSCRIPTION_DEV_MESSAGE,
+    superSafeDevMessage: SUPERSAFE_DEV_MESSAGE
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -77,6 +101,69 @@ export default function AdminPanel() {
       setLocation("/admin-login");
     }
   }, [setLocation, toast]);
+
+  // Force check admin authentication on page load
+  useEffect(() => {
+    // Check server-side authentication status
+    const checkAdminAuth = async () => {
+      try {
+        console.log("Checking admin authentication status");
+
+        // First check if we have admin session in client storage
+        const isAdminAuthenticated = sessionStorage.getItem("adminAuthenticated") === "true";
+        if (!isAdminAuthenticated) {
+          console.log("No admin session found in client storage, redirecting to login");
+          setLocation("/admin-login");
+          return;
+        }
+
+        // Then verify with the server
+        const response = await fetch("/api/admin/seller-verifications", {
+          credentials: "include" // Include cookies
+        });
+
+        // If we get a 401 or 403, the admin is not properly authenticated
+        if (response.status === 401 || response.status === 403) {
+          console.log("Admin not authenticated on server, redirecting to login");
+
+          // Clear all client-side storage
+          console.log("Clearing client-side storage");
+          sessionStorage.removeItem("adminAuthenticated");
+          sessionStorage.removeItem("adminUser");
+          localStorage.removeItem("sessionToken");
+
+          // Clear any query cache that might be keeping user data
+          if (window.queryClient) {
+            console.log("Clearing query client cache");
+            window.queryClient.clear();
+            window.queryClient.removeQueries(["/api/user"]);
+            window.queryClient.removeQueries(["/api/user/subscription"]);
+          }
+
+          // Clear all cookies
+          console.log("Clearing cookies");
+          const cookies = document.cookie.split(";");
+          for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i];
+            const eqPos = cookie.indexOf("=");
+            const name = eqPos > -1 ? cookie.substr(0, eqPos).trim() : cookie.trim();
+            document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;";
+            document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;";
+          }
+
+          setLocation("/admin-login");
+        } else {
+          console.log("Admin authentication verified with server");
+        }
+      } catch (error) {
+        console.error("Error checking admin authentication:", error);
+        // On error, redirect to login to be safe
+        setLocation("/admin-login");
+      }
+    };
+
+    checkAdminAuth();
+  }, [setLocation]);
 
   // Fetch seller verification requests
   const fetchSellerVerifications = async () => {
@@ -268,10 +355,21 @@ export default function AdminPanel() {
           // Initialize with defaults, then override with stored values
           const fetchedSettings: AppSettings = {
             paidFeaturesEnabled: false, // Default is FREE access (paid features disabled)
+            // Development mode toggles
             safesphereDevMode: false,
             aiShopperDevMode: false,
+            subscriptionDevMode: false,
+            superSafeDevMode: false,
+            debugMode: false,
+            // Feature visibility toggles
+            safesphereEnabled: true,
+            aiShopperEnabled: true,
+            superSafeEnabled: true,
+            // Development messages
             safesphereDevMessage: SAFESPHERE_DEV_MESSAGE,
-            aiShopperDevMessage: AI_SHOPPER_DEV_MESSAGE
+            aiShopperDevMessage: AI_SHOPPER_DEV_MESSAGE,
+            subscriptionDevMessage: SUBSCRIPTION_DEV_MESSAGE,
+            superSafeDevMessage: SUPERSAFE_DEV_MESSAGE
           };
 
           // Update with any stored values
@@ -280,6 +378,7 @@ export default function AdminPanel() {
             fetchedSettings.paidFeaturesEnabled = !data.paidFeaturesDisabled;
           }
 
+          // Development mode toggles
           if (data.safesphereDevMode !== undefined) {
             fetchedSettings.safesphereDevMode = data.safesphereDevMode;
           }
@@ -288,12 +387,46 @@ export default function AdminPanel() {
             fetchedSettings.aiShopperDevMode = data.aiShopperDevMode;
           }
 
+          if (data.subscriptionDevMode !== undefined) {
+            fetchedSettings.subscriptionDevMode = data.subscriptionDevMode;
+          }
+
+          if (data.superSafeDevMode !== undefined) {
+            fetchedSettings.superSafeDevMode = data.superSafeDevMode;
+          }
+
+          if (data.debugMode !== undefined) {
+            fetchedSettings.debugMode = data.debugMode;
+          }
+
+          // Feature visibility toggles
+          if (data.safesphereEnabled !== undefined) {
+            fetchedSettings.safesphereEnabled = data.safesphereEnabled;
+          }
+
+          if (data.aiShopperEnabled !== undefined) {
+            fetchedSettings.aiShopperEnabled = data.aiShopperEnabled;
+          }
+
+          if (data.superSafeEnabled !== undefined) {
+            fetchedSettings.superSafeEnabled = data.superSafeEnabled;
+          }
+
+          // Development messages
           if (data.safesphereDevMessage) {
             fetchedSettings.safesphereDevMessage = data.safesphereDevMessage;
           }
 
           if (data.aiShopperDevMessage) {
             fetchedSettings.aiShopperDevMessage = data.aiShopperDevMessage;
+          }
+
+          if (data.subscriptionDevMessage) {
+            fetchedSettings.subscriptionDevMessage = data.subscriptionDevMessage;
+          }
+
+          if (data.superSafeDevMessage) {
+            fetchedSettings.superSafeDevMessage = data.superSafeDevMessage;
           }
 
           setSettings(fetchedSettings);
@@ -320,10 +453,21 @@ export default function AdminPanel() {
       const settingsToSave = [
         // Note: Backend uses paidFeaturesDisabled (inverted) so we need to save the opposite value
         { key: "paidFeaturesDisabled", value: !settings.paidFeaturesEnabled },
+        // Development mode toggles
         { key: "safesphereDevMode", value: settings.safesphereDevMode },
         { key: "aiShopperDevMode", value: settings.aiShopperDevMode },
+        { key: "subscriptionDevMode", value: settings.subscriptionDevMode },
+        { key: "superSafeDevMode", value: settings.superSafeDevMode },
+        { key: "debugMode", value: settings.debugMode },
+        // Feature visibility toggles
+        { key: "safesphereEnabled", value: settings.safesphereEnabled },
+        { key: "aiShopperEnabled", value: settings.aiShopperEnabled },
+        { key: "superSafeEnabled", value: settings.superSafeEnabled },
+        // Development messages
         { key: "safesphereDevMessage", value: settings.safesphereDevMessage },
         { key: "aiShopperDevMessage", value: settings.aiShopperDevMessage },
+        { key: "subscriptionDevMessage", value: settings.subscriptionDevMessage },
+        { key: "superSafeDevMessage", value: settings.superSafeDevMessage },
       ];
 
       // Save each setting
@@ -403,65 +547,186 @@ export default function AdminPanel() {
                 </AlertDescription>
               </Alert>
 
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <Label htmlFor="paid-features" className="text-base">
-                  Paid Features
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  Turn on/off all paid features and subscriptions
-                </p>
+          <div className="space-y-8">
+            {/* Feature Visibility Section */}
+            <div>
+              <h3 className="text-lg font-medium mb-4">Feature Visibility</h3>
+              <div className="space-y-4 border p-4 rounded-md">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label htmlFor="safesphere-enabled" className="text-base">
+                      SafeSphere Enabled
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      Turn on/off SafeSphere feature for all users
+                    </p>
+                  </div>
+                  <Switch
+                    id="safesphere-enabled"
+                    checked={settings.safesphereEnabled}
+                    onCheckedChange={handleToggleChange('safesphereEnabled')}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label htmlFor="ai-shopper-enabled" className="text-base">
+                      Daswos AI Enabled
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      Turn on/off Daswos AI feature for all users
+                    </p>
+                  </div>
+                  <Switch
+                    id="ai-shopper-enabled"
+                    checked={settings.aiShopperEnabled}
+                    onCheckedChange={handleToggleChange('aiShopperEnabled')}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label htmlFor="supersafe-enabled" className="text-base">
+                      SuperSafe Enabled
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      Turn on/off SuperSafe feature for all users
+                    </p>
+                  </div>
+                  <Switch
+                    id="supersafe-enabled"
+                    checked={settings.superSafeEnabled}
+                    onCheckedChange={handleToggleChange('superSafeEnabled')}
+                  />
+                </div>
               </div>
-              <Switch
-                id="paid-features"
-                checked={settings.paidFeaturesEnabled}
-                onCheckedChange={handleToggleChange('paidFeaturesEnabled')}
-              />
             </div>
 
-            <div className="flex items-center justify-between">
-              <div>
-                <Label htmlFor="safesphere-dev" className="text-base">
-                  SafeSphere Development Mode
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  Show development mode message for SafeSphere features
-                </p>
+            {/* Development Mode Section */}
+            <div>
+              <h3 className="text-lg font-medium mb-4">Development Mode</h3>
+              <div className="space-y-4 border p-4 rounded-md">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label htmlFor="safesphere-dev" className="text-base">
+                      SafeSphere Development Mode
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      Show development mode message for SafeSphere features
+                    </p>
+                  </div>
+                  <Switch
+                    id="safesphere-dev"
+                    checked={settings.safesphereDevMode}
+                    onCheckedChange={handleToggleChange('safesphereDevMode')}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label htmlFor="ai-shopper-dev" className="text-base">
+                      Daswos AI Development Mode
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      Show development mode message for Daswos AI features
+                    </p>
+                  </div>
+                  <Switch
+                    id="ai-shopper-dev"
+                    checked={settings.aiShopperDevMode}
+                    onCheckedChange={handleToggleChange('aiShopperDevMode')}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label htmlFor="supersafe-dev" className="text-base">
+                      SuperSafe Development Mode
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      Show development mode message for SuperSafe features
+                    </p>
+                  </div>
+                  <Switch
+                    id="supersafe-dev"
+                    checked={settings.superSafeDevMode}
+                    onCheckedChange={handleToggleChange('superSafeDevMode')}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label htmlFor="subscription-dev" className="text-base">
+                      Subscription Development Mode
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      Enable all premium features for all users without requiring subscriptions
+                    </p>
+                  </div>
+                  <Switch
+                    id="subscription-dev"
+                    checked={settings.subscriptionDevMode}
+                    onCheckedChange={handleToggleChange('subscriptionDevMode')}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label htmlFor="debug-mode" className="text-base">
+                      Debug Mode
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      Show debug information in the user interface
+                    </p>
+                  </div>
+                  <Switch
+                    id="debug-mode"
+                    checked={settings.debugMode}
+                    onCheckedChange={handleToggleChange('debugMode')}
+                  />
+                </div>
               </div>
-              <Switch
-                id="safesphere-dev"
-                checked={settings.safesphereDevMode}
-                onCheckedChange={handleToggleChange('safesphereDevMode')}
-              />
             </div>
 
-            <div className="flex items-center justify-between">
-              <div>
-                <Label htmlFor="ai-shopper-dev" className="text-base">
-                  Daswos AI Development Mode
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  Show development mode message for Daswos AI features
-                </p>
+            {/* Global Settings Section */}
+            <div>
+              <h3 className="text-lg font-medium mb-4">Global Settings</h3>
+              <div className="space-y-4 border p-4 rounded-md">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label htmlFor="paid-features" className="text-base">
+                      Paid Features
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      Turn on/off all paid features and subscriptions
+                    </p>
+                  </div>
+                  <Switch
+                    id="paid-features"
+                    checked={settings.paidFeaturesEnabled}
+                    onCheckedChange={handleToggleChange('paidFeaturesEnabled')}
+                  />
+                </div>
               </div>
-              <Switch
-                id="ai-shopper-dev"
-                checked={settings.aiShopperDevMode}
-                onCheckedChange={handleToggleChange('aiShopperDevMode')}
-              />
             </div>
+          </div>
 
-            <div className="pt-4">
+            <div className="pt-6">
               <Button
                 onClick={saveSettings}
                 disabled={saving}
                 className="w-full"
               >
-                {saving ? "Saving..." : "Save Settings"}
+                {saving ? (
+                  <>
+                    <span className="mr-2">Saving...</span>
+                    <AlertCircle className="h-4 w-4 animate-spin" />
+                  </>
+                ) : (
+                  "Save All Settings"
+                )}
               </Button>
             </div>
-          </div>
           </TabsContent>
 
           <TabsContent value="seller-verifications">
@@ -635,20 +900,119 @@ export default function AdminPanel() {
         <div className="pt-4 border-t mt-6">
           <Button
             onClick={() => {
-              sessionStorage.removeItem("adminAuthenticated");
-              setLocation("/admin-login");
+              // Create a function to handle the logout process
+              const handleLogout = async () => {
+                try {
+                  // Disable the button to prevent multiple clicks
+                  const button = document.querySelector('button.w-full') as HTMLButtonElement;
+                  if (button) {
+                    button.disabled = true;
+                    button.textContent = "Logging out...";
+                  }
+
+                  // Clear client-side storage first
+                  sessionStorage.removeItem("adminAuthenticated");
+                  sessionStorage.removeItem("adminUser");
+
+                  // Clear regular user authentication
+                  localStorage.removeItem("sessionToken");
+
+                  // Clear any query cache that might be keeping user data
+                  window.queryClient?.clear?.();
+
+                  // Clear any React Query cache
+                  try {
+                    // Try to access the queryClient from window
+                    if (window.queryClient) {
+                      window.queryClient.clear();
+                    }
+
+                    // Also try to clear specific user data queries
+                    if (window.queryClient?.removeQueries) {
+                      window.queryClient.removeQueries(["/api/user"]);
+                      window.queryClient.removeQueries(["/api/user/subscription"]);
+                    }
+                  } catch (e) {
+                    console.error("Error clearing query cache:", e);
+                  }
+
+                  // Clear all cookies that might be related to authentication
+                  const cookies = document.cookie.split(";");
+                  for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i];
+                    const eqPos = cookie.indexOf("=");
+                    const name = eqPos > -1 ? cookie.substr(0, eqPos).trim() : cookie.trim();
+                    document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;";
+                    document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;";
+                  }
+
+                  // Call the server-side admin logout endpoint and wait for it to complete
+                  console.log("Calling admin logout endpoint...");
+                  const response = await fetch("/api/admin/logout", {
+                    method: "POST",
+                    credentials: "include" // Important: include cookies
+                  });
+
+                  // Wait for the response to be processed
+                  const result = await response.json();
+                  console.log("Admin logout response:", result);
+
+                  // Also call the regular logout endpoint to ensure all sessions are cleared
+                  try {
+                    console.log("Calling regular logout endpoint...");
+                    await fetch("/api/logout", {
+                      method: "POST",
+                      credentials: "include"
+                    });
+                  } catch (regularLogoutError) {
+                    console.error("Regular logout failed:", regularLogoutError);
+                  }
+
+                  // Add a small delay to ensure the server has time to process the logout
+                  console.log("Waiting for server to process logout...");
+                  await new Promise(resolve => setTimeout(resolve, 500));
+
+                  // Force a complete page reload to clear any in-memory state
+                  console.log("Redirecting to admin login page...");
+                  window.location.replace("/admin-login");
+                } catch (error) {
+                  console.error("Error logging out:", error);
+
+                  // Still try to clear everything client-side
+                  sessionStorage.clear();
+                  localStorage.clear();
+
+                  // Clear all cookies
+                  const cookies = document.cookie.split(";");
+                  for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i];
+                    const eqPos = cookie.indexOf("=");
+                    const name = eqPos > -1 ? cookie.substr(0, eqPos).trim() : cookie.trim();
+                    document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;";
+                  }
+
+                  // Force redirect after a delay
+                  setTimeout(() => {
+                    window.location.replace("/admin-login");
+                  }, 1000);
+                }
+              };
+
+              // Execute the logout function
+              handleLogout();
             }}
-            variant="outline"
+            variant="destructive"
             className="w-full"
           >
-            Logout
+            <LogOutIcon className="h-4 w-4 mr-2" />
+            Admin Logout
           </Button>
         </div>
       </CardContent>
     </Card>
 
     {/* Preview of development messages */}
-    {(settings.safesphereDevMode || settings.aiShopperDevMode) && (
+    {(settings.safesphereDevMode || settings.aiShopperDevMode || settings.subscriptionDevMode || settings.superSafeDevMode || settings.debugMode) && (
       <Card>
         <CardHeader>
           <CardTitle>Development Messages Preview</CardTitle>
@@ -671,6 +1035,33 @@ export default function AdminPanel() {
               <AlertTitle>Daswos AI Development Mode</AlertTitle>
               <AlertDescription>
                 {settings.aiShopperDevMessage}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {settings.superSafeDevMode && (
+            <Alert>
+              <AlertTitle>SuperSafe Development Mode</AlertTitle>
+              <AlertDescription>
+                {settings.superSafeDevMessage}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {settings.subscriptionDevMode && (
+            <Alert>
+              <AlertTitle>Subscription Development Mode</AlertTitle>
+              <AlertDescription>
+                {settings.subscriptionDevMessage}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {settings.debugMode && (
+            <Alert>
+              <AlertTitle>Debug Mode</AlertTitle>
+              <AlertDescription>
+                Debug information is currently visible in the user interface. This should be disabled in production.
               </AlertDescription>
             </Alert>
           )}

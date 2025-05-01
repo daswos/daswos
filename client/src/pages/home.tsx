@@ -11,9 +11,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import SphereToggle from '@/components/sphere-toggle';
+import FeatureAwareSphereToggle from '@/components/feature-aware-sphere-toggle';
 import AutoShopToggle from '@/components/autoshop-toggle';
-import AiSearchToggle from '@/components/ai-search-toggle';
+import FeatureAwareAiSearchToggle from '@/components/feature-aware-ai-search-toggle';
+import FeatureAwareSuperSafeToggle from '@/components/feature-aware-super-safe-toggle';
 import RobotIcon from '@/components/robot-icon';
 
 const Home: React.FC = () => {
@@ -32,6 +33,9 @@ const Home: React.FC = () => {
 
   // AI mode state from local storage
   const [aiModeEnabled, setAiModeEnabled] = useState(false);
+
+  // State for showing/hiding the AutoShop dropdown - default to true when AI is enabled
+  const [showAutoShop, setShowAutoShop] = useState(aiModeEnabled);
   // State for the AI conversation flow
   const [isAskingIfShopping, setIsAskingIfShopping] = useState(false);
   const [currentQuery, setCurrentQuery] = useState('');
@@ -63,6 +67,13 @@ const Home: React.FC = () => {
       window.removeEventListener('aiModeChanged', handleAiModeChange as EventListener);
     };
   }, []);
+
+  // Automatically show AutoShop when AI mode is enabled
+  useEffect(() => {
+    if (aiModeEnabled) {
+      setShowAutoShop(true);
+    }
+  }, [aiModeEnabled]);
 
   const handleNavigation = (path: string) => {
     setLocation(path);
@@ -555,17 +566,30 @@ const Home: React.FC = () => {
             )}
           </div>
 
-          {/* SafeSphere toggle, Daswos AI toggle, and conditional AutoShop button */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-6">
-            <SphereToggle
-              activeSphere={activeSphere}
-              onChange={handleSphereChange}
-            />
-            <AiSearchToggle
-              isEnabled={aiModeEnabled}
-              onToggle={(enabled) => setAiModeEnabled(enabled)}
-            />
-            {aiModeEnabled && <AutoShopToggle />}
+          {/* SafeSphere toggle, Daswos AI toggle, SuperSafe toggle, and conditional AutoShop button */}
+          <div className="flex flex-col items-center justify-center mb-6">
+            {/* Main buttons row - always on one line */}
+            <div className="flex flex-row items-center justify-center gap-3 mb-2">
+              <FeatureAwareSphereToggle
+                activeSphere={activeSphere}
+                onChange={handleSphereChange}
+              />
+              <div className="flex flex-col items-center">
+                <FeatureAwareAiSearchToggle
+                  isEnabled={aiModeEnabled}
+                  onToggle={(enabled) => setAiModeEnabled(enabled)}
+                  showDropdown={showAutoShop}
+                  onDropdownToggle={() => setShowAutoShop(!showAutoShop)}
+                />
+                {/* AutoShop appears directly under Daswos AI when dropdown is open */}
+                {aiModeEnabled && showAutoShop && (
+                  <div className="mt-2">
+                    <AutoShopToggle />
+                  </div>
+                )}
+              </div>
+              <FeatureAwareSuperSafeToggle />
+            </div>
           </div>
 
           {/* Navigation tabs removed to avoid duplication with the bottom navigation bar */}

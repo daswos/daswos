@@ -7,8 +7,11 @@ import { AlertCircle, CheckCircle, Lock } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 // Load the Stripe instance outside the component to avoid reloading it
-// @ts-ignore - Using VITE_STRIPE_PUBLISHABLE_KEY environment variable
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as string);
+// For development/testing, use the Stripe test publishable key
+// In production, use the environment variable
+const STRIPE_PUBLISHABLE_KEY = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || 'pk_test_TYooMQauvdEDq54NiTphI7jx';
+console.log('Using Stripe publishable key:', STRIPE_PUBLISHABLE_KEY);
+const stripePromise = loadStripe(STRIPE_PUBLISHABLE_KEY);
 
 // User registration data interface
 interface RegistrationData {
@@ -19,19 +22,19 @@ interface RegistrationData {
 }
 
 interface StripeWrapperProps {
-  selectedPlan: 'individual' | 'family';
+  selectedPlan: 'limited' | 'unlimited' | 'individual' | 'family';
   billingCycle: 'monthly' | 'annual';
   registrationData?: RegistrationData; // Optional for existing users
   onSuccess: () => void;
   onCancel: () => void;
 }
 
-export const StripeWrapper: React.FC<StripeWrapperProps> = ({ 
-  selectedPlan, 
-  billingCycle, 
+export const StripeWrapper: React.FC<StripeWrapperProps> = ({
+  selectedPlan,
+  billingCycle,
   registrationData,
-  onSuccess, 
-  onCancel 
+  onSuccess,
+  onCancel
 }) => {
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -42,20 +45,26 @@ export const StripeWrapper: React.FC<StripeWrapperProps> = ({
     const createPaymentIntent = async () => {
       setLoading(true);
       try {
+        // For free plans, we don't need to create a payment intent
+        if (selectedPlan === 'limited') {
+          setLoading(false);
+          return;
+        }
+
         const response = await fetch('/api/payment/create-intent', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            type: selectedPlan, 
-            billingCycle 
+          body: JSON.stringify({
+            type: selectedPlan,
+            billingCycle
           }),
         });
-        
+
         if (!response.ok) {
           const errorData = await response.json();
           throw new Error(errorData.error || `HTTP error ${response.status}`);
         }
-        
+
         const data = await response.json();
         setClientSecret(data.clientSecret);
         setAmount(data.amount);
@@ -94,7 +103,8 @@ export const StripeWrapper: React.FC<StripeWrapperProps> = ({
     );
   }
 
-  if (!clientSecret) {
+  // For free plans, we don't need a client secret
+  if (!clientSecret && selectedPlan !== 'limited') {
     return (
       <Alert variant="destructive" className="mb-6">
         <AlertCircle className="h-4 w-4" />
@@ -106,6 +116,97 @@ export const StripeWrapper: React.FC<StripeWrapperProps> = ({
           Go Back
         </Button>
       </Alert>
+    );
+  }
+
+  // For free plans, show a simplified form
+  if (selectedPlan === 'limited') {
+    return (
+      <div className="space-y-6">
+        <div className="bg-blue-50 p-3 rounded-md mb-4 flex items-start">
+          <CheckCircle className="h-5 w-5 text-blue-600 mr-2 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-blue-800">
+              Daswos Limited (Free Plan)
+            </p>
+            <p className="text-xs text-blue-700">
+              No payment required. Enjoy our free features!
+            </p>
+          </div>
+        </div>
+
+        <Button
+          onClick={async () => {
+            setLoading(true);
+            try {
+              if (registrationData) {
+                // New user flow - register with free plan
+                const response = await fetch('/api/register-with-payment', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    ...registrationData,
+                    type: 'limited',
+                    billingCycle: 'monthly',
+                    paymentIntentId: 'free_plan_no_payment'
+                  }),
+                });
+
+                if (!response.ok) {
+                  const errorData = await response.json();
+                  throw new Error(errorData.error || 'Failed to create account');
+                }
+              } else {
+                // Existing user flow - update subscription to free plan
+                const response = await fetch('/api/user/subscription', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    type: 'limited',
+                    billingCycle: 'monthly',
+                    action: 'subscribe'
+                  }),
+                });
+
+                if (!response.ok) {
+                  const errorData = await response.json();
+                  throw new Error(errorData.error || 'Failed to update subscription');
+                }
+              }
+
+              onSuccess();
+            } catch (err) {
+              console.error('Error processing free plan:', err);
+              setError('Failed to process your request. Please try again.');
+            } finally {
+              setLoading(false);
+            }
+          }}
+          disabled={loading}
+          className="w-full"
+        >
+          {loading ? (
+            <>
+              <span className="mr-2">Processing...</span>
+              <span className="animate-spin">⏳</span>
+            </>
+          ) : (
+            'Activate Free Plan'
+          )}
+        </Button>
+
+        {error && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        <Button variant="outline" onClick={onCancel} className="w-full">
+          Cancel
+        </Button>
+      </div>
     );
   }
 
@@ -127,7 +228,7 @@ export const StripeWrapper: React.FC<StripeWrapperProps> = ({
   return (
     <div className="mt-4">
       <Elements stripe={stripePromise} options={options}>
-        <CheckoutForm 
+        <CheckoutForm
           amount={amount}
           selectedPlan={selectedPlan}
           billingCycle={billingCycle}
@@ -142,26 +243,28 @@ export const StripeWrapper: React.FC<StripeWrapperProps> = ({
 
 interface CheckoutFormProps {
   amount: number;
-  selectedPlan: 'individual' | 'family';
+  selectedPlan: 'limited' | 'unlimited' | 'individual' | 'family';
   billingCycle: 'monthly' | 'annual';
   registrationData?: RegistrationData; // Optional for existing users
   onSuccess: () => void;
   onCancel: () => void;
 }
 
-const CheckoutForm: React.FC<CheckoutFormProps> = ({ 
-  amount, 
-  selectedPlan, 
-  billingCycle, 
+const CheckoutForm: React.FC<CheckoutFormProps> = ({
+  amount,
+  selectedPlan,
+  billingCycle,
   registrationData,
-  onSuccess, 
-  onCancel 
+  onSuccess,
+  onCancel
 }) => {
   const stripe = useStripe();
   const elements = useElements();
   const [error, setError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [succeeded, setSucceeded] = useState<boolean>(false);
+  const [stripeCustomerId, setStripeCustomerId] = useState<string | null>(null);
+  const [stripeSubscriptionId, setStripeSubscriptionId] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -173,18 +276,81 @@ const CheckoutForm: React.FC<CheckoutFormProps> = ({
     setIsProcessing(true);
 
     try {
-      const { error: submitError, paymentIntent } = await stripe.confirmPayment({
-        elements,
-        confirmParams: {
-          return_url: `${window.location.origin}/safesphere-subscription?success=true`,
-        },
-        redirect: 'if_required',
-      });
+      // First, create a Stripe customer if this is a new user
+      if (registrationData) {
+        try {
+          const customerResponse = await fetch('/api/stripe/create-customer', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: registrationData.email,
+              name: registrationData.fullName
+            }),
+          });
 
-      if (submitError) {
-        setError(submitError.message || 'An error occurred with your payment. Please try again.');
-      } else if (paymentIntent && paymentIntent.status === 'succeeded') {
-        // Payment successful, now register the user or update subscription depending on context
+          if (customerResponse.ok) {
+            const customerData = await customerResponse.json();
+            setStripeCustomerId(customerData.customerId);
+          }
+        } catch (err) {
+          console.error('Error creating Stripe customer:', err);
+          // Continue with payment even if customer creation fails
+        }
+      }
+
+      // Confirm the payment with better error handling
+      console.log('Confirming payment with Stripe...');
+      try {
+        const { error: submitError, paymentIntent } = await stripe.confirmPayment({
+          elements,
+          confirmParams: {
+            return_url: `${window.location.origin}/safesphere-subscription?success=true`,
+          },
+          redirect: 'if_required',
+        });
+
+        console.log('Payment confirmation result:', submitError ? 'Error' : 'Success', paymentIntent?.status);
+
+        if (submitError) {
+          console.error('Stripe payment error:', submitError);
+          setError(submitError.message || 'An error occurred with your payment. Please try again.');
+          return; // Exit early on error
+        }
+
+        if (!paymentIntent) {
+          console.error('No payment intent returned from Stripe');
+          setError('Payment processing failed. Please try again.');
+          return; // Exit early if no payment intent
+        }
+
+        if (paymentIntent.status === 'succeeded') {
+        // Payment successful, now create a subscription in Stripe
+        try {
+          const paymentMethod = paymentIntent.payment_method;
+
+          if (paymentMethod) {
+            const subscriptionResponse = await fetch('/api/stripe/create-subscription', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                customerId: stripeCustomerId,
+                paymentMethodId: paymentMethod,
+                planType: selectedPlan,
+                billingCycle
+              }),
+            });
+
+            if (subscriptionResponse.ok) {
+              const subscriptionData = await subscriptionResponse.json();
+              setStripeSubscriptionId(subscriptionData.subscriptionId);
+            }
+          }
+        } catch (err) {
+          console.error('Error creating Stripe subscription:', err);
+          // Continue with account creation even if subscription creation fails
+        }
+
+        // Now register the user or update subscription depending on context
         if (registrationData) {
           // New user flow - register with payment
           const response = await fetch('/api/register-with-payment', {
@@ -194,10 +360,12 @@ const CheckoutForm: React.FC<CheckoutFormProps> = ({
               ...registrationData,
               type: selectedPlan,
               billingCycle,
-              paymentIntentId: paymentIntent.id
+              paymentIntentId: paymentIntent.id,
+              stripeCustomerId,
+              stripeSubscriptionId
             }),
           });
-          
+
           if (!response.ok) {
             const errorData = await response.json();
             throw new Error(errorData.error || 'Failed to create account after payment');
@@ -210,10 +378,13 @@ const CheckoutForm: React.FC<CheckoutFormProps> = ({
             body: JSON.stringify({
               type: selectedPlan,
               billingCycle,
-              paymentIntentId: paymentIntent.id
+              paymentIntentId: paymentIntent.id,
+              stripeCustomerId,
+              stripeSubscriptionId,
+              action: 'subscribe'
             }),
           });
-          
+
           if (!response.ok) {
             const errorData = await response.json();
             throw new Error(errorData.error || 'Failed to update subscription');
@@ -222,6 +393,10 @@ const CheckoutForm: React.FC<CheckoutFormProps> = ({
 
         setSucceeded(true);
         onSuccess();
+      }
+      } catch (stripeError) {
+        console.error('Error during Stripe payment confirmation:', stripeError);
+        setError('Payment processing error. Please try again or use a different payment method.');
       }
     } catch (err) {
       console.error('Payment error:', err);
@@ -237,25 +412,33 @@ const CheckoutForm: React.FC<CheckoutFormProps> = ({
         <Lock className="h-5 w-5 text-blue-600 mr-2 mt-0.5" />
         <div>
           <p className="text-sm font-medium text-blue-800">
-            Secure Payment for SafeSphere {selectedPlan} Plan
+            Secure Payment for {
+              selectedPlan === 'limited' ? 'Daswos Limited' :
+              selectedPlan === 'unlimited' ? 'Daswos Unlimited' :
+              selectedPlan === 'individual' ? 'Individual (Legacy)' : 'Family (Legacy)'
+            } Plan
           </p>
           <p className="text-xs text-blue-700">
-            {billingCycle === 'monthly' 
-              ? `Monthly billing at £${amount}` 
-              : `Annual billing at £${amount} (Save £${selectedPlan === 'individual' ? '6' : '14'})`}
+            {billingCycle === 'monthly'
+              ? `Monthly billing at £${amount}`
+              : `Annual billing at £${amount} (Save £${
+                  selectedPlan === 'limited' ? '0' :
+                  selectedPlan === 'unlimited' ? '19.98' :
+                  selectedPlan === 'individual' ? '6' : '14'
+                })`}
           </p>
         </div>
       </div>
-      
+
       <PaymentElement />
-      
+
       {error && (
         <Alert variant="destructive" className="my-4">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      
+
       {succeeded && (
         <Alert variant="default" className="bg-green-50 my-4">
           <CheckCircle className="h-4 w-4 text-green-600" />
@@ -263,11 +446,11 @@ const CheckoutForm: React.FC<CheckoutFormProps> = ({
           <AlertDescription>Your subscription has been activated!</AlertDescription>
         </Alert>
       )}
-      
+
       <div className="flex flex-col space-y-2 sm:flex-row sm:space-y-0 sm:space-x-2">
-        <Button 
-          type="submit" 
-          disabled={!stripe || isProcessing} 
+        <Button
+          type="submit"
+          disabled={!stripe || isProcessing}
           className="flex-1"
         >
           {isProcessing ? (
@@ -282,9 +465,9 @@ const CheckoutForm: React.FC<CheckoutFormProps> = ({
             `Pay £${amount}`
           )}
         </Button>
-        <Button 
-          type="button" 
-          variant="outline" 
+        <Button
+          type="button"
+          variant="outline"
           onClick={onCancel}
           disabled={isProcessing}
           className="flex-1 sm:flex-initial"
@@ -292,12 +475,19 @@ const CheckoutForm: React.FC<CheckoutFormProps> = ({
           Cancel
         </Button>
       </div>
-      
+
       <div className="text-xs text-gray-500 mt-4">
         <p className="flex items-center">
           <Lock className="h-3 w-3 mr-1" />
           Your payment is secured with SSL encryption. We do not store your card details.
         </p>
+        {process.env.NODE_ENV !== 'production' && (
+          <div className="mt-2 p-2 bg-blue-50 rounded text-blue-800">
+            <p className="font-medium">Test Mode</p>
+            <p>Use Stripe test card: 4242 4242 4242 4242</p>
+            <p>Any future date, any 3 digits for CVC, any postal code</p>
+          </div>
+        )}
       </div>
     </form>
   );

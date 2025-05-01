@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { List, Bot, User, Package, FileText, Plus, MoreHorizontal, Home, ChevronsRight, Briefcase, LogOut, ShoppingCart, Coins } from 'lucide-react';
 import BulkBuyIcon from '@/components/icons/bulk-buy-icon';
+import SplitBuyIcon from '@/components/icons/split-buy-icon';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 
@@ -20,6 +21,7 @@ interface DasbarContextType {
   removeItem: (id: string) => void;
   moveItem: (id: string, direction: 'up' | 'down') => void;
   resetToDefaults: () => void;
+  updateDasbarItems: (newItems: NavigationItem[]) => void;
   maxVisibleItems: number;
   setMaxVisibleItems: (count: number) => void;
   isLoading: boolean;
@@ -40,6 +42,7 @@ const defaultItems: NavigationItem[] = [
 const iconMap: Record<string, React.ComponentType<any>> = {
   'Home': Home,
   'BulkBuyIcon': BulkBuyIcon,
+  'SplitBuyIcon': SplitBuyIcon,
   'List': List,
   'Bot': Bot,
   'User': User,
@@ -59,7 +62,7 @@ export const availableItems: NavigationItem[] = [
   { id: 'jobs', label: 'Jobs', path: '/browse-jobs', icon: Briefcase },
   { id: 'ai-assistant', label: 'AI Assistant', path: '/ai-assistant', icon: Bot },
   { id: 'profile', label: 'My Profile', path: '/profile', icon: User },
-  { id: 'split-buys', label: 'My Split Buys', path: '/split-buy-dashboard', icon: Package },
+  { id: 'split-buys', label: 'My Split Buys', path: '/split-buy-dashboard', icon: SplitBuyIcon },
   { id: 'orders', label: 'My Orders', path: '/my-orders', icon: Package },
   { id: 'list-item', label: 'List an Item', path: '/list-item', icon: Plus },
   { id: 'listings', label: 'My Listings', path: '/my-listings', icon: FileText },
@@ -140,17 +143,10 @@ export const DasbarProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         throw new Error('Failed to save dasbar preferences');
       }
 
-      toast({
-        title: "Dasbar preferences saved",
-        description: "Your navigation bar preferences have been saved.",
-      });
+      // Removed toast notification to prevent constant notifications
     } catch (error) {
+      // Only log errors to console, don't show toast notifications
       console.error('Error saving dasbar preferences:', error);
-      toast({
-        title: "Error saving preferences",
-        description: "There was a problem saving your navigation bar preferences.",
-        variant: "destructive"
-      });
     }
   };
 
@@ -158,10 +154,22 @@ export const DasbarProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const visibleItems = items.slice(0, maxVisibleItems);
   const moreItems = items.slice(maxVisibleItems);
 
+  // Helper function to save to localStorage only
+  const saveToLocalStorage = (updatedItems: NavigationItem[]) => {
+    localStorage.setItem('dasbar-items', JSON.stringify(updatedItems));
+    localStorage.setItem('dasbar-max-visible', maxVisibleItems.toString());
+  };
+
   const addItem = (item: NavigationItem) => {
     // Check if item already exists
     if (!items.some(i => i.id === item.id)) {
-      setItems([...items, item]);
+      const updatedItems = [...items, item];
+      setItems(updatedItems);
+
+      // Save to localStorage but don't trigger server save
+      if (!user) {
+        saveToLocalStorage(updatedItems);
+      }
     }
   };
 
@@ -169,7 +177,13 @@ export const DasbarProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     // Don't allow removing default items
     const itemToRemove = items.find(item => item.id === id);
     if (itemToRemove && !itemToRemove.isDefault) {
-      setItems(items.filter(item => item.id !== id));
+      const updatedItems = items.filter(item => item.id !== id);
+      setItems(updatedItems);
+
+      // Save to localStorage but don't trigger server save
+      if (!user) {
+        saveToLocalStorage(updatedItems);
+      }
     }
   };
 
@@ -186,11 +200,31 @@ export const DasbarProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       [newItems[index], newItems[index + 1]] = [newItems[index + 1], newItems[index]];
     }
     setItems(newItems);
+
+    // Save to localStorage but don't trigger server save
+    if (!user) {
+      saveToLocalStorage(newItems);
+    }
   };
 
   const resetToDefaults = () => {
     setItems(defaultItems);
     setMaxVisibleItems(7); // Reset to 7 visible items by default
+
+    // Save to localStorage but don't trigger server save
+    if (!user) {
+      saveToLocalStorage(defaultItems);
+    }
+  };
+
+  // Direct update function for the entire items array
+  const updateDasbarItems = (newItems: NavigationItem[]) => {
+    setItems(newItems);
+
+    // Save to localStorage for non-authenticated users
+    if (!user) {
+      saveToLocalStorage(newItems);
+    }
   };
 
   return (
@@ -202,6 +236,7 @@ export const DasbarProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       removeItem,
       moveItem,
       resetToDefaults,
+      updateDasbarItems,
       maxVisibleItems,
       setMaxVisibleItems,
       isLoading,

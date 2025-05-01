@@ -20,7 +20,7 @@ async function setupDatabase() {
     await client.connect();
 
     console.log('Setting up database schema...');
-    
+
     // Create users table based on schema.ts
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
@@ -37,6 +37,7 @@ async function setupDatabase() {
         subscription_type TEXT,
         subscription_expires_at TIMESTAMP,
         is_family_owner BOOLEAN NOT NULL DEFAULT FALSE,
+        family_owner_id INTEGER,
         parent_account_id INTEGER,
         is_child_account BOOLEAN NOT NULL DEFAULT FALSE,
         super_safe_mode BOOLEAN NOT NULL DEFAULT FALSE,
@@ -153,16 +154,16 @@ async function setupDatabase() {
     const regularUser = await client.query(`
       INSERT INTO users (username, password, email, full_name, is_seller, is_admin)
       VALUES ('regular_user', $1, 'regular@example.com', 'Regular User', FALSE, FALSE)
-      ON CONFLICT (username) DO UPDATE 
+      ON CONFLICT (username) DO UPDATE
       SET password = $1, email = 'regular@example.com', full_name = 'Regular User'
       RETURNING id
     `, [regularPassword]);
-    
+
     console.log('Creating seller user...');
     const sellerUser = await client.query(`
       INSERT INTO users (username, password, email, full_name, is_seller, is_admin)
       VALUES ('seller_user', $1, 'seller@example.com', 'Seller User', TRUE, FALSE)
-      ON CONFLICT (username) DO UPDATE 
+      ON CONFLICT (username) DO UPDATE
       SET password = $1, email = 'seller@example.com', full_name = 'Seller User', is_seller = TRUE
       RETURNING id
     `, [sellerPassword]);
@@ -175,7 +176,7 @@ async function setupDatabase() {
 
     // Create 10 sample products
     console.log('Creating sample products...');
-    
+
     const products = [
       {
         title: 'Premium Smartwatch',
@@ -342,8 +343,8 @@ async function setupDatabase() {
     for (const product of products) {
       await client.query(`
         INSERT INTO products (
-          title, description, price, image_url, seller_id, seller_name, 
-          seller_verified, seller_type, trust_score, tags, shipping, is_bulk_buy, 
+          title, description, price, image_url, seller_id, seller_name,
+          seller_verified, seller_type, trust_score, tags, shipping, is_bulk_buy,
           bulk_minimum_quantity, bulk_discount_rate, image_description
         )
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
@@ -351,7 +352,7 @@ async function setupDatabase() {
         product.title, product.description, product.price, product.image_url,
         product.seller_id, product.seller_name, product.seller_verified,
         product.seller_type, product.trust_score, product.tags, product.shipping,
-        product.is_bulk_buy, product.bulk_minimum_quantity || null, 
+        product.is_bulk_buy, product.bulk_minimum_quantity || null,
         product.bulk_discount_rate || null, product.image_description
       ]);
     }
@@ -360,7 +361,7 @@ async function setupDatabase() {
 
     // Create 10 information content items
     console.log('Creating information content...');
-    
+
     const informationContent = [
       {
         title: 'How to Identify Trustworthy Online Sellers',
@@ -497,8 +498,8 @@ async function setupDatabase() {
     for (const info of informationContent) {
       await client.query(`
         INSERT INTO information_content (
-          title, content, summary, source_url, source_name, 
-          source_verified, source_type, trust_score, category, 
+          title, content, summary, source_url, source_name,
+          source_verified, source_type, trust_score, category,
           tags, image_url
         )
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
@@ -514,7 +515,7 @@ async function setupDatabase() {
     // Create a few search queries
     await client.query(`
       INSERT INTO search_queries (query, sphere, content_type)
-      VALUES 
+      VALUES
         ('headphones', 'safesphere', 'products'),
         ('sustainable shopping', 'safesphere', 'information'),
         ('kitchen tools', 'safesphere', 'products'),

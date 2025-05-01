@@ -8,9 +8,10 @@ import { User as SelectUser } from "@shared/schema";
 import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation, useRoute } from "wouter";
+import { useAdminSettings } from "@/hooks/use-admin-settings";
 
 type SubscriptionData = {
-  type: "individual" | "family";
+  type: "limited" | "unlimited" | "individual" | "family"; // Keep legacy types for backward compatibility
   billingCycle: "monthly" | "annual";
   action?: "subscribe" | "switch" | "cancel";
 };
@@ -34,39 +35,37 @@ type RegisterData = {
   verificationData?: any; // For linking seller verification data
 };
 
-interface AuthContextValue {
-  user: SelectUser | null;
-  isLoading: boolean;
-  error: Error | null;
-  hasSubscription: boolean;
-  isCheckingSubscription: boolean;
-  subscriptionDetails: SubscriptionDetails | null;
-  loginMutation: UseMutationResult<any, Error, LoginData>;
-  logoutMutation: UseMutationResult<any, Error, void>;
-  registerMutation: UseMutationResult<any, Error, RegisterData>;
-  subscriptionMutation: UseMutationResult<any, Error, SubscriptionData>;
+interface LoggedInUser {
+  id: string;
+  username: string;
+  isActive: boolean;
 }
 
-const defaultContextValue: AuthContextValue = {
-  user: null,
-  isLoading: false,
-  error: null,
-  hasSubscription: false,
-  isCheckingSubscription: false,
-  subscriptionDetails: null,
-  loginMutation: {} as any,
-  logoutMutation: {} as any,
-  registerMutation: {} as any,
-  subscriptionMutation: {} as any
+interface AuthContextType {
+  loggedInUsers: LoggedInUser[];
+  activeUser: LoggedInUser | null;
+  switchUser: (userId: string) => void;
+  addUser: (credentials: LoginCredentials) => Promise<void>;
+  removeUser: (userId: string) => void;
+  logoutAll: () => void;
+}
+
+const defaultContextValue: AuthContextType = {
+  loggedInUsers: [],
+  activeUser: null,
+  switchUser: () => {},
+  addUser: async () => {},
+  removeUser: () => {},
+  logoutAll: () => {}
 };
 
-export const AuthContext = createContext<AuthContextValue>(defaultContextValue);
+export const AuthContext = createContext<AuthContextType>(defaultContextValue);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [match] = useRoute("/safesphere-subscription");
-  
+
   // Fetch user data
   const {
     data: user,
@@ -87,9 +86,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     enabled: !!user, // Only run this query if user is logged in
   });
 
+  // Get admin settings to check for subscription dev mode
+  const { settings } = useAdminSettings();
+
   const hasSubscription = Boolean(
-    subscriptionDetails?.hasSubscription || 
-    (user?.email === 'admin@manipulai.com')
+    subscriptionDetails?.hasSubscription ||
+    (user?.email === 'admin@manipulai.com') ||
+    settings.subscriptionDevMode
   );
 
   // Handle new registration redirect to subscription page
@@ -97,7 +100,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (user && 'isNewRegistration' in user && !match) {
       // Redirect to subscription page
       setLocation('/safesphere-subscription');
-      
+
       // Clean up the flag after redirection
       setTimeout(() => {
         const cleanedUser = { ...user };
@@ -110,27 +113,71 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const loginMutation = useMutation({
     mutationFn: async (credentials: LoginData) => {
       try {
-        // apiRequest already returns the JSON-parsed response
-        return await apiRequest("POST", "/api/login", credentials);
-      } catch (error: any) {
-        // Extract the detailed error message from the API response if available
-        if (error.message && error.message.includes('401')) {
-          throw new Error("Invalid username or password");
+        console.log("Attempting login for user:", credentials.username);
+
+        // Add a timeout to the fetch request
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+
+        try {
+          // apiRequest already returns the JSON-parsed response
+          const response = await apiRequest("POST", "/api/login", credentials, {
+            signal: controller.signal
+          });
+
+          clearTimeout(timeoutId);
+          return response;
+        } catch (fetchError: any) {
+          clearTimeout(timeoutId);
+
+          // Handle specific error cases
+          if (fetchError.name === 'AbortError') {
+            console.error("Login request timed out");
+            throw new Error("Login request timed out. Please try again.");
+          }
+
+          // Handle network errors
+          if (!navigator.onLine) {
+            console.error("Network offline");
+            throw new Error("You appear to be offline. Please check your internet connection.");
+          }
+
+          // Extract the detailed error message from the API response if available
+          if (fetchError.message && fetchError.message.includes('401')) {
+            throw new Error("Invalid username or password");
+          }
+
+          if (fetchError.message && fetchError.message.includes('Failed to fetch')) {
+            console.error("Failed to fetch during login:", fetchError);
+            throw new Error("Unable to connect to the server. Please try again later.");
+          }
+
+          throw fetchError;
         }
+      } catch (error: any) {
+        console.error("Login error in mutation function:", error);
         throw error;
       }
     },
-    onSuccess: (user: SelectUser) => {
-      queryClient.setQueryData(["/api/user"], user);
+    onSuccess: (data: any) => {
+      // Store the user data in the query cache
+      queryClient.setQueryData(["/api/user"], data.user);
+
+      // Store the session token in localStorage for future API requests
+      if (data.sessionToken) {
+        localStorage.setItem('sessionToken', data.sessionToken);
+        console.log('Session token stored:', data.sessionToken);
+      }
+
       toast({
         title: "Login successful",
-        description: `Welcome back, ${user.username}!`,
+        description: `Welcome back, ${data.user.username}!`,
       });
     },
     onError: (error: Error) => {
       // Component-level error handling will take care of this
       console.error("Login error:", error.message);
-      
+
       // Show toast only when not in auth page (where we show inline errors)
       if (window.location.pathname !== "/auth") {
         toast({
@@ -147,13 +194,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       try {
         // Save verification data for after registration
         const verificationData = credentials.verificationData;
-        
+
         // Remove verification data from credentials before sending
         const { verificationData: _, ...registerCredentials } = credentials;
-        
+
         // apiRequest already returns the JSON-parsed response
         const userData = await apiRequest("POST", "/api/register", registerCredentials);
-        
+
         // If we have verification data, process it after successful registration
         if (verificationData) {
           try {
@@ -166,7 +213,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             // The user can try again later from their account
           }
         }
-        
+
         return userData;
       } catch (error: any) {
         // Extract the detailed error message from the API response if available
@@ -176,7 +223,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             : error.message.includes('Username already exists')
               ? 'Username already exists'
               : error.message;
-          
+
           throw new Error(errorMessage);
         }
         throw error;
@@ -184,12 +231,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     },
     onSuccess: (user: SelectUser) => {
       queryClient.setQueryData(["/api/user"], user);
-      
+
       // Check if the user has pending seller verification
-      const verificationMessage = user.pendingSellerVerification 
+      const verificationMessage = user.pendingSellerVerification
         ? " Your seller verification is pending approval."
         : "";
-      
+
       toast({
         title: "Registration successful",
         description: `Welcome to DasWos, ${user.username}!${verificationMessage}`,
@@ -209,18 +256,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     onSuccess: (data) => {
       // Invalidate subscription query to refresh data
       queryClient.invalidateQueries({ queryKey: ["/api/user/subscription"] });
-      
+
       // Also refresh user data since family owner status might have changed
       queryClient.invalidateQueries({ queryKey: ["/api/user"] });
-      
-      // If this is a family subscription, also refresh family members
-      if (data?.type === 'family') {
+
+      // If this is a family or unlimited subscription, also refresh family members
+      if (data?.type === 'family' || data?.type === 'unlimited') {
         queryClient.invalidateQueries({ queryKey: ["/api/family/members"] });
       }
-      
+
       toast({
         title: "Subscription activated",
-        description: "Your SafeSphere subscription has been activated successfully!",
+        description: `Your ${
+          data?.type === 'limited' ? 'Daswos Limited' :
+          data?.type === 'unlimited' ? 'Daswos Unlimited' :
+          data?.type === 'individual' ? 'Individual (Legacy)' : 'Family (Legacy)'
+        } subscription has been activated successfully!`,
       });
     },
     onError: (error: Error) => {
@@ -234,26 +285,53 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
-      // Use fetch directly to avoid apiRequest JSON parsing
+      // Check if this is an admin user
+      const isAdmin = user?.username === 'admin';
+
+      // If admin, call the admin logout endpoint first
+      if (isAdmin) {
+        try {
+          const adminLogoutResponse = await fetch("/api/admin/logout", {
+            method: "POST",
+            credentials: "include"
+          });
+
+          if (!adminLogoutResponse.ok) {
+            console.error("Admin logout failed");
+          }
+        } catch (error) {
+          console.error("Error in admin logout:", error);
+        }
+      }
+
+      // Then call the regular logout endpoint
       const response = await fetch("/api/logout", {
         method: "POST",
         credentials: "include"
       });
-      
+
       if (!response.ok) {
         throw new Error(`Logout failed with status: ${response.status}`);
       }
-      
+
       return {}; // Return empty object to satisfy the type system
     },
     onSuccess: () => {
+      // Clear query cache
       queryClient.setQueryData(["/api/user"], null);
       queryClient.setQueryData(["/api/user/subscription"], null);
+
+      // Clear admin session if it exists
+      if (sessionStorage.getItem("adminAuthenticated")) {
+        sessionStorage.removeItem("adminAuthenticated");
+        sessionStorage.removeItem("adminUser");
+      }
+
       toast({
         title: "Logged out",
         description: "You have been successfully logged out.",
       });
-      
+
       // Redirect to home page after logout
       window.location.href = "/";
     },
@@ -289,3 +367,5 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 export function useAuth() {
   return useContext(AuthContext);
 }
+
+

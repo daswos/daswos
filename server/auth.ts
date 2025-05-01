@@ -6,6 +6,7 @@ import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { storage } from "./storage";
 import { User as SelectUser } from "@shared/schema";
+import { v4 as uuidv4 } from 'uuid';
 
 declare global {
   namespace Express {
@@ -26,14 +27,14 @@ export async function comparePasswords(supplied: string, stored: string) {
     console.error("Invalid stored password format, missing salt separator");
     return false;
   }
-  
+
   const [hashed, salt] = stored.split(".");
-  
+
   if (!hashed || !salt) {
     console.error("Invalid stored password format, missing hash or salt");
     return false;
   }
-  
+
   const hashedBuf = Buffer.from(hashed, "hex");
   const suppliedBuf = (await scryptAsync(supplied, salt, 64)) as Buffer;
   return timingSafeEqual(hashedBuf, suppliedBuf);
@@ -64,7 +65,7 @@ export function setupAuth(app: Express) {
       try {
         // Check if the input looks like an email (contains @)
         const isEmail = username.includes('@');
-        
+
         // Try to find user by email or username (case insensitive)
         let user;
         if (isEmail) {
@@ -72,13 +73,27 @@ export function setupAuth(app: Express) {
         } else {
           user = await storage.getUserByUsername(username);
         }
-        
+
         if (!user || !(await comparePasswords(password, user.password))) {
           return done(null, false);
         } else {
-          return done(null, user);
+          // Handle missing family_owner_id column gracefully
+          try {
+            // Check if familyOwnerId exists in the user object
+            if (user.familyOwnerId === undefined) {
+              console.log('Warning: familyOwnerId is undefined for user', user.id);
+              // Add the missing property with a default value
+              user.familyOwnerId = null;
+            }
+            return done(null, user);
+          } catch (columnError) {
+            console.error('Error accessing familyOwnerId:', columnError);
+            // Still return the user, even if we couldn't add the missing property
+            return done(null, user);
+          }
         }
       } catch (err) {
+        console.error('Error in LocalStrategy:', err);
         return done(err);
       }
     }),
@@ -88,11 +103,11 @@ export function setupAuth(app: Express) {
     console.log('Serializing user:', user.id);
     return done(null, user.id);
   });
-  
+
   passport.deserializeUser(async (id: number, done) => {
     try {
       console.log('Deserializing user ID:', id);
-      
+
       // Handle special hardcoded admin user
       if (id === 999999) {
         console.log('Deserializing hardcoded admin user');
@@ -111,6 +126,7 @@ export function setupAuth(app: Express) {
           subscriptionType: null,
           subscriptionExpiresAt: null,
           isFamilyOwner: false,
+          familyOwnerId: null, // Add the missing property
           parentAccountId: null,
           isChildAccount: false,
           superSafeMode: false,
@@ -121,7 +137,7 @@ export function setupAuth(app: Express) {
           dasWosCoins: 0
         });
       }
-      
+
       // Regular user lookup
       const user = await storage.getUser(id);
       if (!user) {
@@ -144,7 +160,7 @@ export function setupAuth(app: Express) {
         console.log('Found existing user by username:', existingUserByName.id);
         return res.status(400).json({ error: "Username already exists" });
       }
-      
+
       // Check if email already exists using storage interface
       const existingUserByEmail = await storage.getUserByEmail(req.body.email);
       if (existingUserByEmail) {
@@ -162,18 +178,18 @@ export function setupAuth(app: Express) {
         if (err) return next(err);
         const userToReturn = { ...user } as any;
         delete userToReturn.password; // Don't send password back
-        
+
         // Set a flag to indicate this is a new registration
         // The client will use this to redirect to the subscription page
         userToReturn.isNewRegistration = true;
-        
+
         res.status(201).json(userToReturn);
       });
     } catch (err) {
       next(err);
     }
   });
-  
+
   // New endpoint to validate registration data without creating a user
   app.post("/api/validate-registration", async (req, res) => {
     try {
@@ -183,7 +199,7 @@ export function setupAuth(app: Express) {
         console.log('Validate registration - Found existing user by username:', existingUserByName.id);
         return res.status(400).json({ error: "Username already exists" });
       }
-      
+
       // Check if email already exists using storage interface
       const existingUserByEmail = await storage.getUserByEmail(req.body.email);
       if (existingUserByEmail) {
@@ -199,81 +215,141 @@ export function setupAuth(app: Express) {
     }
   });
 
-  app.post("/api/login", (req, res, next) => {
-    passport.authenticate("local", async (err: Error | null, user: SelectUser | false, info: any) => {
-      if (err) return next(err);
-      if (!user) {
-        return res.status(401).json({ error: "Invalid username or password" });
-      }
-      
-      // Save the session cart items before login
-      const sessionCartItems = req.session.cart || [];
-      
-      req.login(user, async (err) => {
-        if (err) return next(err);
-        
-        try {
-          // If there were items in the session cart, merge them with the user's database cart
-          if (sessionCartItems.length > 0) {
-            console.log(`Merging ${sessionCartItems.length} session cart items for user ${user.id}`);
-            
-            // Add each session cart item to the user's database cart
-            for (const item of sessionCartItems) {
-              if (item && item.productId) {
-                // Get the latest product data to ensure we have accurate information
-                const product = await storage.getProductById(item.productId);
-                
-                if (product) {
-                  // Add the item to the user's database cart
-                  await storage.addCartItem({
-                    userId: user.id,
-                    productId: item.productId,
-                    quantity: item.quantity || 1,
-                    source: item.source || 'manual'
-                  });
-                  console.log(`Added product ID ${item.productId} to user ${user.id}'s cart`);
-                } else {
-                  console.warn(`Product ID ${item.productId} from session cart not found in database`);
-                }
-              }
-            }
-            
-            // Clear the session cart after merging
-            req.session.cart = [];
-            console.log('Session cart cleared after merging with database cart');
-          }
-          
-          const userToReturn = { ...user } as any;
-          delete userToReturn.password; // Don't send password back
-          res.status(200).json(userToReturn);
-        } catch (error) {
-          console.error('Error merging carts during login:', error);
-          // Still return success but log the error
-          const userToReturn = { ...user } as any;
-          delete userToReturn.password;
-          res.status(200).json(userToReturn);
+  app.post("/api/login", async (req, res, next) => {
+    try {
+      const { username, password } = req.body;
+
+      // Add more detailed logging
+      console.log(`Login attempt for username: ${username}`);
+
+      try {
+        // Try to get the user from the database
+        const user = await storage.getUserByUsername(username);
+
+        if (!user) {
+          console.log(`User not found: ${username}`);
+          return res.status(401).json({ error: "Invalid credentials" });
         }
-      });
-    })(req, res, next);
+
+        // Verify password
+        const passwordValid = await comparePasswords(password, user.password);
+        if (!passwordValid) {
+          console.log(`Invalid password for user: ${username}`);
+          return res.status(401).json({ error: "Invalid credentials" });
+        }
+
+        console.log(`User authenticated successfully: ${username} (ID: ${user.id})`);
+
+        // Handle missing family_owner_id column gracefully
+        try {
+          // Check if familyOwnerId exists in the user object
+          if (user.familyOwnerId === undefined) {
+            console.log('Warning: familyOwnerId is undefined for user', user.id);
+            // Add the missing property with a default value
+            user.familyOwnerId = null;
+          }
+        } catch (columnError) {
+          console.error('Error accessing familyOwnerId:', columnError);
+          // Continue with login even if we couldn't add the missing property
+        }
+
+        // Create new session
+        const sessionToken = uuidv4();
+        const deviceInfo = {
+          userAgent: req.headers['user-agent'],
+          ip: req.ip
+        };
+
+        // Create session in database
+        try {
+          const session = await storage.createUserSession({
+            userId: user.id,
+            sessionToken,
+            deviceInfo,
+            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
+          });
+
+          // Also create a passport session for compatibility
+          req.login(user, (loginErr) => {
+            if (loginErr) {
+              console.error("Error in passport login:", loginErr);
+              // Continue anyway since we have the token-based session
+            }
+
+            // Return user info and session token
+            const userInfo = { ...user };
+            delete userInfo.password;
+
+            res.json({
+              user: userInfo,
+              sessionToken,
+              expiresAt: session.expiresAt
+            });
+          });
+        } catch (sessionError) {
+          console.error("Error creating session:", sessionError);
+
+          // Even if session creation fails, we can still log the user in
+          // Return user info without session token
+          const userInfo = { ...user };
+          delete userInfo.password;
+
+          res.json({
+            user: userInfo,
+            message: "Logged in with limited functionality"
+          });
+        }
+      } catch (dbError) {
+        console.error("Database error during login:", dbError);
+        return res.status(500).json({ error: "Database error, please try again" });
+      }
+    } catch (error) {
+      console.error("Unexpected error in login endpoint:", error);
+      next(error);
+    }
   });
 
-  app.post("/api/logout", (req, res, next) => {
-    req.logout((err) => {
-      if (err) return next(err);
-      // Explicitly destroy the session to ensure it's properly removed
+  // New endpoint to get all active sessions for a user
+  app.get("/api/sessions", async (req, res) => {
+    const sessions = await storage.getUserSessions(req.user?.id);
+    res.json(sessions);
+  });
+
+  // Modified logout endpoint
+  app.post("/api/logout", async (req, res) => {
+    const { sessionToken } = req.body;
+    await storage.deactivateSession(sessionToken);
+
+    // Also destroy the session if it exists
+    if (req.session) {
       req.session.destroy((err) => {
-        if (err) return next(err);
-        res.clearCookie('connect.sid'); // Clear the session cookie
-        res.sendStatus(200);
+        if (err) {
+          console.error("Error destroying session:", err);
+        }
       });
+    }
+
+    // Clear authentication
+    req.logout((err) => {
+      if (err) {
+        console.error("Error logging out:", err);
+      }
     });
+
+    res.sendStatus(200);
+  });
+
+  // Logout all sessions
+  app.post("/api/logout-all", async (req, res) => {
+    await storage.deactivateAllUserSessions(req.user?.id);
+    res.sendStatus(200);
   });
 
   app.get("/api/user", (req, res) => {
     if (!req.isAuthenticated()) return res.status(401).json({ error: "Not authenticated" });
     const userToReturn = { ...req.user } as any;
     delete userToReturn.password; // Don't send password back
-    
+
     // Let the database values be the source of truth for subscription status
     res.json(userToReturn);
   });

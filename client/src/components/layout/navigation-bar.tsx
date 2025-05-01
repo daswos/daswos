@@ -81,10 +81,8 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
             );
           })}
 
-          {/* More menu for additional items */}
-          {moreItems.length > 0 && (
-            <DasbarMoreMenu className="nav-item" />
-          )}
+          {/* More menu for additional items - always show it */}
+          <DasbarMoreMenu className="nav-item" />
         </div>
       </div>
     </div>

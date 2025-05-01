@@ -53,7 +53,7 @@ export function ProtectedSubscriptionRoute({
 }) {
   const { user, isLoading, hasSubscription, isCheckingSubscription } = useAuth();
   const { settings, loading: loadingSettings } = useAdminSettings();
-  
+
   // Show loading state while checking authentication or subscription or feature flag
   if (isLoading || isCheckingSubscription || loadingSettings) {
     return (
@@ -65,9 +65,9 @@ export function ProtectedSubscriptionRoute({
     );
   }
 
-  // If paid features are disabled, allow access without authentication
-  if (settings.paidFeaturesDisabled) {
-    console.log("ProtectedSubscriptionRoute: Paid features are disabled, allowing access without subscription");
+  // If paid features are disabled or subscription dev mode is enabled, allow access without subscription
+  if (settings.paidFeaturesDisabled || settings.subscriptionDevMode) {
+    console.log("ProtectedSubscriptionRoute: Paid features are disabled or subscription dev mode is enabled, allowing access without subscription");
     return <Route path={path} component={Component} />;
   }
 
@@ -95,7 +95,7 @@ export function ProtectedSubscriptionRoute({
             </CardHeader>
             <CardContent className="text-center">
               <p className="text-slate-600 mb-4">
-                SafeSphere gives you access to verified sellers, enhanced security features, 
+                SafeSphere gives you access to verified sellers, enhanced security features,
                 and advanced trust score filtering to ensure your transactions are protected.
               </p>
             </CardContent>

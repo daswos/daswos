@@ -4,7 +4,7 @@ import {
   LogOutIcon, ShoppingBag, UserIcon, ShieldCheck, Search,
   Split, ShoppingCart, Plus, Minus, Trash2, Info, MessageSquare,
   ChevronDown, ChevronRight, Store as StoreIcon, Sun, Moon, Wallet, Package,
-  Loader2, Settings
+  Loader2, Settings, Cog
 } from 'lucide-react';
 // Theme provider removed as we're using a fixed logo
 import { useAuth } from '@/hooks/use-auth';
@@ -260,7 +260,86 @@ const Header = () => {
 
   // AI search toggle functionality moved to home page
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    // Check if this is an admin user and clear admin session
+    if (user?.username === 'admin') {
+      try {
+        console.log("Admin user detected, performing admin logout");
+
+        // First, clear all client-side storage
+        console.log("Clearing client-side storage");
+        sessionStorage.removeItem("adminAuthenticated");
+        sessionStorage.removeItem("adminUser");
+        localStorage.removeItem("sessionToken");
+
+        // Clear any query cache that might be keeping user data
+        if (window.queryClient) {
+          console.log("Clearing query client cache");
+          window.queryClient.clear();
+          window.queryClient.removeQueries(["/api/user"]);
+          window.queryClient.removeQueries(["/api/user/subscription"]);
+        }
+
+        // Clear all cookies
+        console.log("Clearing cookies");
+        const cookies = document.cookie.split(";");
+        for (let i = 0; i < cookies.length; i++) {
+          const cookie = cookies[i];
+          const eqPos = cookie.indexOf("=");
+          const name = eqPos > -1 ? cookie.substr(0, eqPos).trim() : cookie.trim();
+          document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;";
+          document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;";
+        }
+
+        // Call the regular logout endpoint first
+        console.log("Calling regular logout endpoint");
+        try {
+          await fetch("/api/logout", {
+            method: "POST",
+            credentials: "include"
+          });
+        } catch (error) {
+          console.error("Error in regular logout:", error);
+        }
+
+        // Then call the server-side admin logout endpoint
+        console.log("Calling admin logout endpoint");
+        const response = await fetch("/api/admin/logout", {
+          method: "POST",
+          credentials: "include", // Important: include cookies
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            sessionToken: localStorage.getItem('sessionToken')
+          })
+        });
+
+        if (!response.ok) {
+          console.error("Admin logout failed with status:", response.status);
+        } else {
+          console.log("Admin logout successful");
+        }
+
+        // Add a delay to ensure the server has time to process the logout
+        console.log("Waiting for server to process logout...");
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // Force a complete page reload to clear any in-memory state
+        console.log("Redirecting to home page...");
+        window.location.replace("/");
+        return; // Don't proceed with regular logout
+      } catch (error) {
+        console.error("Error in admin logout:", error);
+
+        // Force redirect even if there was an error
+        window.location.replace("/");
+        return;
+      }
+    }
+
+    // Proceed with regular logout
+    console.log("Performing regular user logout");
     logoutMutation.mutate();
   };
 
@@ -537,11 +616,11 @@ const Header = () => {
 
           {/* Mobile AI Search Toggle removed - now positioned under search bar */}
 
-          {/* Mobile Sign In/Out Button */}
+          {/* User Menu - Combined for both mobile and desktop */}
           {!user ? (
             <button
               onClick={() => handleNavigation('/auth')}
-              className="md:hidden bg-white px-2 py-1 border border-gray-300 text-black text-xs items-center flex ml-2"
+              className="bg-white px-2 py-1 border border-gray-300 text-black text-xs items-center flex ml-2"
             >
               <UserIcon className="h-4 w-4 mr-1" />
               <span>Sign in</span>
@@ -549,7 +628,7 @@ const Header = () => {
           ) : (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="md:hidden bg-white px-2 py-1 border border-gray-300 text-black flex items-center text-xs ml-2">
+                <button className="bg-white px-2 py-1 border border-gray-300 text-black flex items-center text-xs ml-2">
                   <UserIcon className="h-4 w-4 mr-1" />
                   <span>{user.username}</span>
                 </button>
@@ -565,24 +644,9 @@ const Header = () => {
                     <span>My Profile</span>
                   </DropdownMenuItem>
 
-                  <DropdownMenuItem onClick={() => handleNavigation('/split-buy-dashboard')} className="py-1 px-2 text-xs hover:bg-gray-200 rounded-none flex items-center user-menu-item">
-                    <Split className="mr-2 h-3 w-3" />
-                    <span>My Split Buys</span>
-                  </DropdownMenuItem>
-
-                  <DropdownMenuItem onClick={() => handleNavigation('/my-orders')} className="py-1 px-2 text-xs hover:bg-gray-200 rounded-none flex items-center user-menu-item">
-                    <ShoppingBag className="mr-2 h-3 w-3" />
-                    <span>My Orders</span>
-                  </DropdownMenuItem>
-
-                  <DropdownMenuItem onClick={() => handleNavigation('/my-listings')} className="py-1 px-2 text-xs hover:bg-gray-200 rounded-none flex items-center user-menu-item">
-                    <StoreIcon className="mr-2 h-3 w-3" />
-                    <span>My Listings</span>
-                  </DropdownMenuItem>
-
-                  <DropdownMenuItem onClick={() => handleNavigation('/dasbar-settings')} className="py-1 px-2 text-xs hover:bg-gray-200 rounded-none flex items-center user-menu-item">
-                    <Settings className="mr-2 h-3 w-3" />
-                    <span>My Dasbar</span>
+                  <DropdownMenuItem onClick={() => handleNavigation('/user-settings')} className="py-1 px-2 text-xs hover:bg-gray-200 rounded-none flex items-center user-menu-item">
+                    <Cog className="mr-2 h-3 w-3" />
+                    <span>Settings</span>
                   </DropdownMenuItem>
 
                   <DropdownMenuSeparator className="h-px bg-gray-300 my-1" />
@@ -594,69 +658,6 @@ const Header = () => {
                 </div>
               </DropdownMenuContent>
             </DropdownMenu>
-          )}
-
-          {/* Desktop User Menu - Old-school style */}
-          {user ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button className="bg-white px-2 py-1 border border-gray-300 text-black flex items-center text-xs">
-                  <UserIcon className="h-4 w-4 mr-1" />
-                  <span>{user.username}</span>
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="bg-white text-black p-1 border border-gray-300 rounded-none shadow-md user-dropdown">
-                <div className="border-b border-gray-300 py-1 px-2 text-center bg-gray-100">
-                  <p className="text-xs font-medium">{user.username}</p>
-                </div>
-
-                <div>
-                  <DropdownMenuItem onClick={() => handleNavigation('/profile')} className="py-1 px-2 text-xs hover:bg-gray-200 rounded-none flex items-center user-menu-item">
-                    <UserIcon className="mr-2 h-3 w-3" />
-                    <span>My Profile</span>
-                  </DropdownMenuItem>
-
-                  <DropdownMenuItem onClick={() => handleNavigation('/split-buy-dashboard')} className="py-1 px-2 text-xs hover:bg-gray-200 rounded-none flex items-center user-menu-item">
-                    <Split className="mr-2 h-3 w-3" />
-                    <span>My Split Buys</span>
-                  </DropdownMenuItem>
-
-                  <DropdownMenuItem onClick={() => handleNavigation('/my-orders')} className="py-1 px-2 text-xs hover:bg-gray-200 rounded-none flex items-center user-menu-item">
-                    <ShoppingBag className="mr-2 h-3 w-3" />
-                    <span>My Orders</span>
-                  </DropdownMenuItem>
-
-                  <DropdownMenuItem onClick={() => handleNavigation('/seller-search')} className="py-1 px-2 text-xs hover:bg-gray-200 rounded-none flex items-center user-menu-item">
-                    <Plus className="mr-2 h-3 w-3" />
-                    <span>List an Item</span>
-                  </DropdownMenuItem>
-
-                  <DropdownMenuItem onClick={() => handleNavigation('/my-listings')} className="py-1 px-2 text-xs hover:bg-gray-200 rounded-none flex items-center user-menu-item">
-                    <StoreIcon className="mr-2 h-3 w-3" />
-                    <span>My Listings</span>
-                  </DropdownMenuItem>
-
-                  <DropdownMenuItem onClick={() => handleNavigation('/dasbar-settings')} className="py-1 px-2 text-xs hover:bg-gray-200 rounded-none flex items-center user-menu-item">
-                    <Settings className="mr-2 h-3 w-3" />
-                    <span>My Dasbar</span>
-                  </DropdownMenuItem>
-
-                  <DropdownMenuSeparator className="h-px bg-gray-300 my-1" />
-
-                  <DropdownMenuItem onClick={handleLogout} className="py-1 px-2 text-xs hover:bg-gray-200 rounded-none flex items-center user-menu-item">
-                    <LogOutIcon className="mr-2 h-3 w-3" />
-                    <span>Log out</span>
-                  </DropdownMenuItem>
-                </div>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : (
-            <button
-              onClick={() => handleNavigation('/auth')}
-              className="hidden md:flex bg-white px-2 py-1 border border-gray-300 text-black text-xs items-center"
-            >
-              Sign in
-            </button>
           )}
         </div>
       </div>
@@ -687,3 +688,4 @@ const Header = () => {
 };
 
 export default Header;
+

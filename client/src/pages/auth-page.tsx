@@ -48,6 +48,7 @@ export default function AuthPage() {
   const { user, loginMutation, registerMutation } = useAuth();
   const [activeTab, setActiveTab] = useState<"login" | "register">("login");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
   // Get URL parameters
   const getUrlParams = () => {
@@ -122,10 +123,24 @@ export default function AuthPage() {
     // Clear previous error
     setErrorMessage(null);
 
+    // Show loading state
+    setIsLoading(true);
+
     loginMutation.mutate(data, {
+      onSuccess: () => {
+        setIsLoading(false);
+      },
       onError: (error: Error) => {
+        setIsLoading(false);
+
         // Set error message to display to the user
-        setErrorMessage(error.message || "Invalid username or password");
+        if (error.message.includes("Failed to fetch") || error.message.includes("Unable to connect")) {
+          setErrorMessage("Unable to connect to the server. Please check your internet connection and try again.");
+        } else if (error.message.includes("timed out")) {
+          setErrorMessage("Login request timed out. The server might be busy, please try again.");
+        } else {
+          setErrorMessage(error.message || "Invalid username or password");
+        }
       }
     });
   };
@@ -133,6 +148,9 @@ export default function AuthPage() {
   const handleRegister = (data: z.infer<typeof registerSchema>) => {
     // Clear previous error
     setErrorMessage(null);
+
+    // Show loading state
+    setIsLoading(true);
 
     const { confirmPassword, ...registerData } = data;
 
@@ -146,6 +164,7 @@ export default function AuthPage() {
         // Check if the email matches (if verification has an email)
         if (verificationData.email && verificationData.email !== data.email) {
           setErrorMessage("Please use the same email address you entered in the seller verification form.");
+          setIsLoading(false);
           return;
         }
 
@@ -163,10 +182,12 @@ export default function AuthPage() {
       onSuccess: () => {
         // Clear seller verification data from session storage after successful registration
         sessionStorage.removeItem('sellerVerificationData');
+        setIsLoading(false);
       },
       onError: (error: Error) => {
         // Set error message to display to the user
         setErrorMessage(error.message);
+        setIsLoading(false);
       }
     });
   };

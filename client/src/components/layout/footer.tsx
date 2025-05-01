@@ -27,7 +27,7 @@ const Footer = () => {
               </a>
             </div>
           </div>
-          
+
           <div>
             <h3 className="text-lg font-semibold mb-4 font-outfit">Quick Links</h3>
             <div className="grid grid-cols-2 gap-2">
@@ -45,17 +45,18 @@ const Footer = () => {
                   <li><Link href="/terms" className="text-gray-400 hover:text-white transition-colors">Terms of Service</Link></li>
                   <li><Link href="/cookies" className="text-gray-400 hover:text-white transition-colors">Cookie Policy</Link></li>
                   <li><Link href="/accessibility" className="text-gray-400 hover:text-white transition-colors">Accessibility</Link></li>
+                  <li><Link href="/admin-login" className="text-gray-400 hover:text-white transition-colors">Admin</Link></li>
                 </ul>
               </div>
             </div>
           </div>
         </div>
-        
+
         <div className="border-t border-gray-800 pt-6">
           <div className="flex flex-col md:flex-row justify-between items-center">
             <p className="text-gray-500 text-sm">© {new Date().getFullYear()} DasWos. All rights reserved.</p>
             <div className="flex space-x-6 mt-4 md:mt-0">
-              <Link href="/admin-login" className="text-gray-500 hover:text-gray-300 text-sm">Admin</Link>
+              {/* Admin link moved to Quick Links section */}
             </div>
           </div>
         </div>

@@ -3,7 +3,8 @@ import { useLocation } from 'wouter';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, AlertCircle, X, ShoppingBag } from 'lucide-react';
 import SearchBar from '@/components/search-bar';
-import SphereToggle from '@/components/sphere-toggle';
+import FeatureAwareSphereToggle from '@/components/feature-aware-sphere-toggle';
+import FeatureAwareSuperSafeToggle from '@/components/feature-aware-super-safe-toggle';
 import ProductTile from '@/components/product-tile';
 import '@/styles/product-tile.css';
 import { Product } from '@shared/schema';
@@ -17,6 +18,8 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { useAdminSettings } from '@/hooks/use-admin-settings';
+import { useSuperSafe } from '@/contexts/super-safe-context';
+import { useToast } from '@/hooks/use-toast';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -55,6 +58,8 @@ const SearchResults: React.FC = () => {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
   const { settings } = useAdminSettings();
+  const { isSuperSafeEnabled, settings: superSafeSettings } = useSuperSafe();
+  const { toast } = useToast();
 
   // Handle bulkbuy as a special case that redirects to the bulkbuy page
   useEffect(() => {
@@ -65,11 +70,12 @@ const SearchResults: React.FC = () => {
 
   // Only allow safesphere or opensphere in the regular search
   // If sphere is explicitly set in URL, use that value
-  // Otherwise default to safesphere when user is logged in (since user preference is safesphere by default)
+  // Otherwise respect SuperSafe Mode settings if enabled
   const [activeSphere, setActiveSphere] = useState<'safesphere' | 'opensphere'>(
     sphereParam ?
       (sphereParam === 'safesphere' ? 'safesphere' : 'opensphere') :
-      (user ? 'safesphere' : 'opensphere')
+      (user && isSuperSafeEnabled && superSafeSettings.blockOpenSphere ? 'safesphere' :
+       user ? 'safesphere' : 'opensphere')
   );
 
   // Filter state
@@ -141,9 +147,22 @@ const SearchResults: React.FC = () => {
 
   // Query for products
   const { data: allProducts = [], isLoading, error } = useQuery<Product[]>({
-    queryKey: ['/api/products', activeSphere, searchQuery],
+    queryKey: ['/api/products', activeSphere, searchQuery, isSuperSafeEnabled, superSafeSettings],
     queryFn: async () => {
-      const url = `/api/products?sphere=${activeSphere}${searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ''}`;
+      // Build URL with SuperSafe Mode parameters if enabled
+      let url = `/api/products?sphere=${activeSphere}${searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ''}`;
+
+      // Add SuperSafe Mode parameters if enabled
+      if (isSuperSafeEnabled) {
+        url += `&superSafeEnabled=true`;
+        if (superSafeSettings.blockGambling) {
+          url += `&blockGambling=true`;
+        }
+        if (superSafeSettings.blockAdultContent) {
+          url += `&blockAdultContent=true`;
+        }
+      }
+
       const response = await fetch(url);
       if (!response.ok) {
         throw new Error('Failed to fetch products');
@@ -289,6 +308,16 @@ const SearchResults: React.FC = () => {
       return;
     }
 
+    // If SuperSafe Mode is enabled and OpenSphere is blocked, prevent switching to OpenSphere
+    if (sphere === 'opensphere' && user && isSuperSafeEnabled && superSafeSettings.blockOpenSphere) {
+      toast({
+        title: "OpenSphere Blocked",
+        description: "OpenSphere access is blocked by your SuperSafe Mode settings.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     // If switching from SafeSphere to OpenSphere, show confirmation dialog
     if (sphere === 'opensphere' && activeSphere === 'safesphere') {
       setPendingSphereChange(sphere);
@@ -313,7 +342,11 @@ const SearchResults: React.FC = () => {
               timestamp: new Date().toISOString(),
               sphere: activeSphere,
               contentType: "products", // Specify this is a product search
-              filters: {}
+              filters: {},
+              // Include SuperSafe Mode settings
+              superSafeEnabled: isSuperSafeEnabled,
+              superSafeSettings: isSuperSafeEnabled ? superSafeSettings : null,
+              userId: user?.id
             })
           });
         } catch (error) {
@@ -323,7 +356,7 @@ const SearchResults: React.FC = () => {
 
       saveSearch();
     }
-  }, [searchQuery, activeSphere]);
+  }, [searchQuery, activeSphere, isSuperSafeEnabled, superSafeSettings, user]);
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -386,11 +419,13 @@ const SearchResults: React.FC = () => {
 
         <SearchBar initialQuery={searchQuery} className="max-w-2xl mx-auto mb-6" />
 
-        <SphereToggle
-          activeSphere={activeSphere}
-          onChange={handleSphereChange}
-          className="mb-4"
-        />
+        <div className="flex flex-row items-center justify-center gap-3 mb-4">
+          <FeatureAwareSphereToggle
+            activeSphere={activeSphere}
+            onChange={handleSphereChange}
+          />
+          <FeatureAwareSuperSafeToggle />
+        </div>
 
         {/* SafeSphere Info Alert */}
         {activeSphere === 'opensphere' && !user && !showSafeSphereNotification && !settings.paidFeaturesDisabled && (

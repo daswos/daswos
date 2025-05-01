@@ -26,9 +26,8 @@ const DasbarMoreMenu: React.FC<DasbarMoreMenuProps> = ({ className = '' }) => {
     return location === path || location.startsWith(`${path}/`);
   };
 
-  if (moreItems.length === 0) {
-    return null;
-  }
+  // Always show the More button, even if there are no additional items
+  // This ensures the More button is always visible in the DasBar
 
   return (
     <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
@@ -45,45 +44,51 @@ const DasbarMoreMenu: React.FC<DasbarMoreMenuProps> = ({ className = '' }) => {
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="center" className="w-48">
-        {moreItems.map((item) => {
-          const IconComponent = item.icon;
-          return (
-            <DropdownMenuItem
-              key={item.id}
-              onClick={() => {
-                navigate(item.path);
-                setIsOpen(false);
-              }}
-              className={`
-                cursor-pointer
-                ${isActive(item.path) ? 'bg-gray-100 dark:bg-gray-800' : ''}
-              `}
-            >
-              <div className="flex items-center">
-                {IconComponent && <IconComponent className="h-5 w-5 mr-2" />}
-                <span>{item.label}</span>
-              </div>
-            </DropdownMenuItem>
-          );
-        })}
-
-        {user && (
+        {/* Show more items if available */}
+        {moreItems.length > 0 && (
           <>
+            {moreItems.map((item) => {
+              const IconComponent = item.icon;
+              return (
+                <DropdownMenuItem
+                  key={item.id}
+                  onClick={() => {
+                    navigate(item.path);
+                    setIsOpen(false);
+                  }}
+                  className={`
+                    cursor-pointer
+                    ${isActive(item.path) ? 'bg-gray-100 dark:bg-gray-800' : ''}
+                  `}
+                >
+                  <div className="flex items-center">
+                    {IconComponent && <IconComponent className="h-5 w-5 mr-2" />}
+                    <span>{item.label}</span>
+                  </div>
+                </DropdownMenuItem>
+              );
+            })}
             <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={() => {
-                navigate('/dasbar-settings');
-                setIsOpen(false);
-              }}
-              className="cursor-pointer"
-            >
-              <div className="flex items-center">
-                <Settings className="h-4 w-4 mr-2" />
-                <span>Customize Dasbar</span>
-              </div>
-            </DropdownMenuItem>
           </>
         )}
+
+        {/* Always show the Customize DasBar option for logged-in users */}
+        {user && (
+          <DropdownMenuItem
+            onClick={() => {
+              navigate('/user-settings');
+              setIsOpen(false);
+            }}
+            className="cursor-pointer"
+          >
+            <div className="flex items-center">
+              <Settings className="h-4 w-4 mr-2" />
+              <span>Customize Dasbar</span>
+            </div>
+          </DropdownMenuItem>
+        )}
+
+
       </DropdownMenuContent>
     </DropdownMenu>
   );

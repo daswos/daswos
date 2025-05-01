@@ -18,12 +18,13 @@ async function throwIfResNotOk(res: Response) {
 export async function apiRequest<T = any>(
   urlOrMethod: string,
   optionsOrUrl?: RequestInit | string,
-  data?: any
+  data?: any,
+  extraOptions?: RequestInit
 ): Promise<T> {
   // Handle different call signatures to maintain backward compatibility
   let url: string;
   let options: RequestInit = {};
-  
+
   // Check if first param is HTTP method or URL
   if (urlOrMethod.startsWith('/') || urlOrMethod.startsWith('http')) {
     // Old signature: apiRequest(url, options)
@@ -41,10 +42,32 @@ export async function apiRequest<T = any>(
       body: data ? JSON.stringify(data) : undefined
     };
   }
-  
+
+  // Merge in any extra options (like signal for AbortController)
+  if (extraOptions) {
+    options = {
+      ...options,
+      ...extraOptions,
+      // Merge headers separately to avoid overwriting
+      headers: {
+        ...options.headers,
+        ...extraOptions.headers
+      }
+    };
+  }
+
   // Always include credentials for all API requests to ensure consistent session handling
   options.credentials = "include";
-  
+
+  // Add session token to headers if available
+  const sessionToken = localStorage.getItem('sessionToken');
+  if (sessionToken) {
+    options.headers = {
+      ...options.headers,
+      "Authorization": `Bearer ${sessionToken}`
+    };
+  }
+
   // Handle the case when body is passed in options
   if (options.body && typeof options.body === 'string') {
     try {
@@ -57,17 +80,17 @@ export async function apiRequest<T = any>(
       console.error("Error parsing request body:", e);
     }
   }
-  
+
   const res = await fetch(url, options);
   await throwIfResNotOk(res);
-  
+
   // Check if there's content before trying to parse as JSON
   const contentType = res.headers.get('content-type');
   if (contentType && contentType.includes('application/json') && res.status !== 204) {
     // Only parse as JSON if we have JSON content
     return await res.json() as T;
   }
-  
+
   // For empty responses or non-JSON responses, return an empty object
   return {} as T;
 }
@@ -78,8 +101,16 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
+    // Prepare headers with session token if available
+    const headers: HeadersInit = {};
+    const sessionToken = localStorage.getItem('sessionToken');
+    if (sessionToken) {
+      headers["Authorization"] = `Bearer ${sessionToken}`;
+    }
+
     const res = await fetch(queryKey[0] as string, {
       credentials: "include",
+      headers
     });
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {
@@ -95,14 +126,14 @@ export const getQueryFn: <T>(options: {
       }
       throw error;
     }
-    
+
     // Check if there's content before trying to parse as JSON
     const contentType = res.headers.get('content-type');
     if (contentType && contentType.includes('application/json') && res.status !== 204) {
       // Only parse as JSON if we have JSON content
       return await res.json();
     }
-    
+
     // For empty responses or non-JSON responses, return an empty object
     return {};
   };

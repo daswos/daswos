@@ -5,8 +5,11 @@ import {
   insertSearchQuerySchema,
   Product,
   insertCartItemSchema,
-  CartItemWithProduct
+  CartItemWithProduct,
+  users
 } from "@shared/schema";
+import { db } from "./db";
+import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { setupAuth, hashPassword, comparePasswords } from "./auth";
 import 'express-session';
@@ -16,29 +19,18 @@ import { createDaswosAiRoutes } from './routes/daswos-ai';
 import { setupAiSearchRoutes } from './routes/ai-search';
 import { setupSellerAiRoutes } from './routes/seller-ai';
 import { setupCategorySearchRoutes } from './routes/category-search';
+import createUserSettingsRoutes from './routes/user-settings';
+import { createStripeRoutes } from './routes/stripe';
+import { createPaymentRoutes } from './routes/payment';
+import {
+  createPaymentIntent,
+  createCustomer,
+  createSubscription,
+  getPlanAmount,
+  getPriceId
+} from './stripe';
 
-// Stripe payment functions (placeholders for now)
-const getPlanAmount = (type, billingCycle) => {
-  // Mock implementation
-  const basePrices = {
-    individual: 999, // $9.99
-    family: 1999,    // $19.99
-    standard: 0       // Free
-  };
-
-  // Apply annual discount
-  return billingCycle === 'annual' ?
-    Math.floor(basePrices[type] * 10) : // 10 months for the price of 12
-    basePrices[type];
-};
-
-const createPaymentIntent = async (amount) => {
-  // Mock implementation
-  return {
-    client_secret: `pi_mock_${Date.now()}_secret_${Math.random().toString(36).substring(2, 15)}`,
-    amount
-  };
-};
+// Stripe payment functions are imported from ./stripe.ts
 
 // Extend Express Session type to include our cart property
 declare module 'express-session' {
@@ -82,15 +74,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const query = req.query.q as string || "";
       const isBulkBuy = req.query.bulk === 'true';
 
-      // If bulkBuy is requested, modify the sphere to include bulkbuy filter
+      // SuperSafe Mode parameters
+      const superSafeEnabled = req.query.superSafeEnabled === 'true';
+      const blockGambling = req.query.blockGambling === 'true';
+      const blockAdultContent = req.query.blockAdultContent === 'true';
+
+      // If SuperSafe Mode is enabled and OpenSphere is blocked, force SafeSphere
       let effectiveSphere = sphere;
-      if (isBulkBuy) {
-        effectiveSphere = sphere === 'safesphere' ? 'bulkbuy-safe' : 'bulkbuy-open';
+      if (superSafeEnabled && req.query.blockOpenSphere === 'true' && sphere === 'opensphere') {
+        effectiveSphere = 'safesphere';
+        console.log('SuperSafe Mode: Forcing SafeSphere due to OpenSphere blocking');
       }
 
-      console.log(`Products API request - sphere: ${sphere}, query: "${query}", bulkBuy: ${isBulkBuy}, effectiveSphere: ${effectiveSphere}`);
+      // If bulkBuy is requested, modify the sphere to include bulkbuy filter
+      if (isBulkBuy) {
+        effectiveSphere = effectiveSphere === 'safesphere' ? 'bulkbuy-safe' : 'bulkbuy-open';
+      }
 
-      const products = await storage.getProducts(effectiveSphere, query);
+      console.log(`Products API request - sphere: ${sphere}, query: "${query}", bulkBuy: ${isBulkBuy}, effectiveSphere: ${effectiveSphere}, superSafeEnabled: ${superSafeEnabled}`);
+
+      // Get products based on the effective sphere
+      let products = await storage.getProducts(effectiveSphere, query);
+
+      // Apply SuperSafe Mode filters if enabled
+      if (superSafeEnabled) {
+        // Filter out gambling-related products if blockGambling is enabled
+        if (blockGambling) {
+          const gamblingKeywords = ['gambling', 'casino', 'poker', 'betting', 'lottery', 'slot', 'roulette'];
+          products = products.filter(product => {
+            const title = product.title.toLowerCase();
+            const description = product.description.toLowerCase();
+            const tags = product.tags.map(tag => tag.toLowerCase());
+
+            // Check if any gambling keywords are in the title, description, or tags
+            return !gamblingKeywords.some(keyword =>
+              title.includes(keyword) ||
+              description.includes(keyword) ||
+              tags.includes(keyword)
+            );
+          });
+          console.log(`SuperSafe Mode: Filtered out gambling-related products, ${products.length} remaining`);
+        }
+
+        // Filter out adult content if blockAdultContent is enabled
+        if (blockAdultContent) {
+          const adultKeywords = ['adult', 'mature', 'xxx', 'nsfw', 'explicit', 'erotic'];
+          products = products.filter(product => {
+            const title = product.title.toLowerCase();
+            const description = product.description.toLowerCase();
+            const tags = product.tags.map(tag => tag.toLowerCase());
+
+            // Check if any adult keywords are in the title, description, or tags
+            return !adultKeywords.some(keyword =>
+              title.includes(keyword) ||
+              description.includes(keyword) ||
+              tags.includes(keyword)
+            );
+          });
+          console.log(`SuperSafe Mode: Filtered out adult content, ${products.length} remaining`);
+        }
+      }
+
       res.json(products);
     } catch (error) {
       console.error('Error fetching products:', error);
@@ -146,16 +190,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const query = req.query.q as string || "";
       const sphere = req.query.sphere as string || "safesphere";
 
-      console.log(`BulkBuy API Request - Query: "${query}", Sphere: "${sphere}"`);
+      // SuperSafe Mode parameters
+      const superSafeEnabled = req.query.superSafeEnabled === 'true';
+      const blockGambling = req.query.blockGambling === 'true';
+      const blockAdultContent = req.query.blockAdultContent === 'true';
+
+      // If SuperSafe Mode is enabled and OpenSphere is blocked, force SafeSphere
+      let effectiveSphere = sphere;
+      if (superSafeEnabled && req.query.blockOpenSphere === 'true' && sphere === 'opensphere') {
+        effectiveSphere = 'safesphere';
+        console.log('SuperSafe Mode: Forcing SafeSphere due to OpenSphere blocking');
+      }
+
+      console.log(`BulkBuy API Request - Query: "${query}", Sphere: "${sphere}", SuperSafe: ${superSafeEnabled}`);
 
       // Create a special sphere type that combines bulkbuy with the safesphere/opensphere filter
-      const bulkbuySphere = sphere === "safesphere" ? "bulkbuy-safe" : "bulkbuy-open";
+      const bulkbuySphere = effectiveSphere === "safesphere" ? "bulkbuy-safe" : "bulkbuy-open";
       console.log(`Using combined sphere filter: "${bulkbuySphere}"`);
 
-      // Pass both filters to storage
-      const bulkBuyProducts = await storage.getProducts(bulkbuySphere, query);
-      console.log(`BulkBuy API Response - Found ${bulkBuyProducts.length} products`);
+      // Get products based on the effective sphere
+      let bulkBuyProducts = await storage.getProducts(bulkbuySphere, query);
 
+      // Apply SuperSafe Mode filters if enabled
+      if (superSafeEnabled) {
+        // Filter out gambling-related products if blockGambling is enabled
+        if (blockGambling) {
+          const gamblingKeywords = ['gambling', 'casino', 'poker', 'betting', 'lottery', 'slot', 'roulette'];
+          bulkBuyProducts = bulkBuyProducts.filter(product => {
+            const title = product.title.toLowerCase();
+            const description = product.description.toLowerCase();
+            const tags = product.tags.map(tag => tag.toLowerCase());
+
+            // Check if any gambling keywords are in the title, description, or tags
+            return !gamblingKeywords.some(keyword =>
+              title.includes(keyword) ||
+              description.includes(keyword) ||
+              tags.includes(keyword)
+            );
+          });
+          console.log(`SuperSafe Mode: Filtered out gambling-related products, ${bulkBuyProducts.length} remaining`);
+        }
+
+        // Filter out adult content if blockAdultContent is enabled
+        if (blockAdultContent) {
+          const adultKeywords = ['adult', 'mature', 'xxx', 'nsfw', 'explicit', 'erotic'];
+          bulkBuyProducts = bulkBuyProducts.filter(product => {
+            const title = product.title.toLowerCase();
+            const description = product.description.toLowerCase();
+            const tags = product.tags.map(tag => tag.toLowerCase());
+
+            // Check if any adult keywords are in the title, description, or tags
+            return !adultKeywords.some(keyword =>
+              title.includes(keyword) ||
+              description.includes(keyword) ||
+              tags.includes(keyword)
+            );
+          });
+          console.log(`SuperSafe Mode: Filtered out adult content, ${bulkBuyProducts.length} remaining`);
+        }
+      }
+
+      console.log(`BulkBuy API Response - Found ${bulkBuyProducts.length} products`);
       res.json(bulkBuyProducts);
     } catch (error) {
       console.error('BulkBuy API Error:', error);
@@ -200,7 +295,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Save search query
   app.post("/api/search", async (req, res) => {
     try {
-      const searchData = insertSearchQuerySchema.parse(req.body);
+      // Get user ID from session if authenticated
+      const userId = req.isAuthenticated() ? req.user.id : null;
+
+      // Extend the schema to include SuperSafe Mode fields
+      const extendedSearchSchema = insertSearchQuerySchema.extend({
+        superSafeEnabled: z.boolean().optional(),
+        superSafeSettings: z.object({
+          blockGambling: z.boolean(),
+          blockAdultContent: z.boolean(),
+          blockOpenSphere: z.boolean()
+        }).optional().nullable(),
+        userId: z.number().optional().nullable()
+      });
+
+      // Parse the request body with the extended schema
+      const searchData = extendedSearchSchema.parse({
+        ...req.body,
+        userId: userId || req.body.userId || null
+      });
+
       const savedQuery = await storage.saveSearchQuery(searchData);
       res.status(201).json(savedQuery);
     } catch (error) {
@@ -389,6 +503,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     try {
+      // Check if subscription dev mode is enabled
+      let subscriptionDevMode = false;
+      try {
+        const settings = await storage.getAppSettings('subscriptionDevMode');
+        subscriptionDevMode = settings === true;
+      } catch (error) {
+        console.error('Error checking subscription dev mode settings:', error);
+      }
+
+      // If subscription dev mode is enabled, return a simulated subscription
+      if (subscriptionDevMode) {
+        return res.json({
+          hasSubscription: true,
+          type: "individual",
+          billingCycle: "monthly",
+          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
+          devMode: true
+        });
+      }
+
       const subscription = await storage.getUserSubscriptionDetails(req.user.id);
       res.json(subscription);
     } catch (error) {
@@ -403,6 +537,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     try {
+      // Check if subscription dev mode is enabled
+      let subscriptionDevMode = false;
+      try {
+        const settings = await storage.getAppSettings('subscriptionDevMode');
+        subscriptionDevMode = settings === true;
+      } catch (error) {
+        console.error('Error checking subscription dev mode settings:', error);
+      }
+
+      // If subscription dev mode is enabled, return true for subscription check
+      if (subscriptionDevMode) {
+        return res.json({
+          hasSubscription: true,
+          devMode: true
+        });
+      }
+
       const hasSubscription = await storage.checkUserHasSubscription(req.user.id);
       res.json({ hasSubscription });
     } catch (error) {
@@ -415,21 +566,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/payment/create-intent", async (req, res) => {
     try {
       const schema = z.object({
-        type: z.enum(["individual", "family", "standard"]),
-        billingCycle: z.enum(["monthly", "annual"])
+        type: z.enum(["limited", "unlimited", "individual", "family", "standard"]),
+        billingCycle: z.enum(["monthly", "annual"]),
+        customerId: z.string().optional()
       });
 
-      const { type, billingCycle } = schema.parse(req.body);
+      const { type, billingCycle, customerId } = schema.parse(req.body);
 
       // Get the appropriate amount based on plan and billing cycle
       const amount = getPlanAmount(type, billingCycle);
 
+      // For free plans, return a mock payment intent
+      if (amount === 0) {
+        return res.json({
+          clientSecret: `pi_free_secret_${Date.now()}`,
+          amount: 0,
+          currency: 'gbp',
+          id: `pi_free_${Date.now()}`
+        });
+      }
+
+      // Create metadata for the payment intent
+      const metadata = {
+        subscriptionType: type,
+        billingCycle: billingCycle
+      };
+
       // Create a payment intent
-      const paymentIntent = await createPaymentIntent(amount);
+      const paymentIntent = await createPaymentIntent(
+        amount,
+        'gbp',
+        customerId,
+        metadata
+      );
 
       res.json({
         clientSecret: paymentIntent.client_secret,
-        amount
+        amount,
+        priceId: getPriceId(type, billingCycle)
       });
     } catch (error) {
       console.error('Error creating payment intent:', error);
@@ -451,9 +625,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         password: z.string().min(6),
 
         // Subscription data
-        type: z.enum(["individual", "family", "standard"]),
+        type: z.enum(["limited", "unlimited", "individual", "family", "standard"]), // Keep legacy types for backward compatibility
         billingCycle: z.enum(["monthly", "annual"]),
-        paymentIntentId: z.string()
+        paymentIntentId: z.string(),
+        stripeCustomerId: z.string().optional(),
+        stripeSubscriptionId: z.string().optional()
       });
 
       const userData = schema.parse(req.body);
@@ -486,6 +662,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         durationMonths
       );
 
+      // If we have Stripe subscription information, store it
+      if (userData.stripeCustomerId && userData.stripeSubscriptionId && userData.type !== 'limited') {
+        await storage.createStripeSubscription(
+          user.id,
+          userData.stripeCustomerId,
+          userData.stripeSubscriptionId,
+          userData.type,
+          userData.billingCycle
+        );
+      }
+
       // Log the user in
       req.login(updatedUser, (err) => {
         if (err) {
@@ -513,21 +700,86 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(401).json({ error: "Not authenticated" });
     }
 
+    // Check if subscription dev mode is enabled
+    let subscriptionDevMode = false;
+    try {
+      const settings = await storage.getAppSettings('subscriptionDevMode');
+      subscriptionDevMode = settings === true;
+    } catch (error) {
+      console.error('Error checking subscription dev mode settings:', error);
+    }
+
     try {
       const schema = z.object({
-        type: z.enum(["individual", "family", "admin"]),
+        type: z.enum(["limited", "unlimited", "individual", "family", "admin"]),
         billingCycle: z.enum(["monthly", "annual"]),
         paymentMethodId: z.string().optional(),
         paymentIntentId: z.string().optional(),
-        action: z.enum(["subscribe", "switch", "cancel"]).default("subscribe")
+        stripeCustomerId: z.string().optional(),
+        stripeSubscriptionId: z.string().optional(),
+        action: z.enum(["subscribe", "switch", "cancel"]).default("subscribe"),
+        testMode: z.boolean().optional() // Add test mode flag
       });
 
-      const { type, billingCycle, paymentMethodId, paymentIntentId, action } = schema.parse(req.body);
+      const {
+        type,
+        billingCycle,
+        paymentMethodId,
+        paymentIntentId,
+        stripeCustomerId,
+        stripeSubscriptionId,
+        action,
+        testMode
+      } = schema.parse(req.body);
+
+      // If subscription dev mode is enabled or testMode flag is set, return success without processing payment
+      if (subscriptionDevMode || testMode) {
+        console.log(`Processing subscription in ${testMode ? 'test mode' : 'dev mode'}`);
+        
+        // Set duration based on billing cycle
+        const durationMonths = billingCycle === "annual" ? 12 : 1;
+        
+        // Update the user's subscription in our database
+        const user = await storage.updateUserSubscription(req.user.id, type, durationMonths);
+        
+        // If we have Stripe subscription information, store it
+        if (stripeCustomerId && stripeSubscriptionId && type !== 'limited') {
+          await storage.createStripeSubscription(
+            req.user.id,
+            stripeCustomerId,
+            stripeSubscriptionId,
+            type,
+            billingCycle
+          );
+        }
+
+        return res.json({
+          success: true,
+          message: `Subscription processed successfully (${testMode ? 'test mode' : 'dev mode'})`,
+          subscription: {
+            type: type,
+            billingCycle: billingCycle,
+            expiresAt: user.subscriptionExpiresAt
+          }
+        });
+      }
 
       // Handle subscription cancellation
       if (action === "cancel") {
-        // In a real implementation, we would also cancel the subscription in Stripe
-        const user = await storage.updateUserSubscription(req.user.id, "", 0); // Clear subscription
+        // Get the user's Stripe subscription
+        const stripeSubscription = await storage.getStripeSubscription(req.user.id);
+
+        if (stripeSubscription?.stripeSubscriptionId) {
+          // Cancel the subscription in Stripe
+          await storage.updateStripeSubscription(
+            req.user.id,
+            stripeSubscription.stripeSubscriptionId,
+            'canceled'
+          );
+        }
+
+        // Clear the user's subscription in our database
+        const user = await storage.updateUserSubscription(req.user.id, "limited", 0);
 
         return res.json({
           success: true,
@@ -536,16 +788,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
+      // For free tier, just update the user subscription without payment
+      if (type === "limited") {
+        const user = await storage.updateUserSubscription(req.user.id, type, 0);
+
+        return res.json({
+          success: true,
+          message: "Free subscription activated successfully",
+          subscription: {
+            type,
+            billingCycle: "monthly",
+            expiresAt: null
+          }
+        });
+      }
+
+      // For paid subscriptions, we need payment information
+      if (!stripeCustomerId && !paymentMethodId) {
+        return res.status(400).json({
+          error: "Payment information is required for paid subscriptions"
+        });
+      }
+
       // Set duration based on billing cycle
       const durationMonths = billingCycle === "annual" ? 12 : 1;
 
-      // For subscribe or switch actions, update the subscription
-      // In a real app, we would use the paymentMethodId to create or update a subscription in Stripe
-      // and then update our database with the subscription details
-      const user = await storage.updateUserSubscription(req.user.id, type, durationMonths);
+      // If we have a Stripe subscription ID, store it
+      if (stripeSubscriptionId && stripeCustomerId) {
+        // Create or update the Stripe subscription record
+        await storage.createStripeSubscription(
+          req.user.id,
+          stripeCustomerId,
+          stripeSubscriptionId,
+          type,
+          billingCycle
+        );
+      }
 
-      // In a real implementation, we would verify the payment was successful
-      // by checking the status of the payment intent
+      // Update the user's subscription in our database
+      const user = await storage.updateUserSubscription(req.user.id, type, durationMonths);
 
       const actionMessage = action === "switch" ? "changed" : "activated";
 
@@ -568,6 +849,162 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Family account management endpoints
+
+  // Create family invitation code
+  app.post("/api/family/invitation", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    try {
+      // Check if user has a family subscription
+      const subscription = await storage.getUserSubscriptionDetails(req.user.id);
+      if (!subscription.hasSubscription ||
+          (subscription.type !== "unlimited" && subscription.type !== "family")) {
+        return res.status(403).json({
+          error: "Family account features require Daswos Unlimited subscription"
+        });
+      }
+
+      // Check if user is a family owner
+      const isOwner = await storage.isFamilyOwner(req.user.id);
+      if (!isOwner) {
+        return res.status(403).json({
+          error: "Only family account owners can create invitation codes"
+        });
+      }
+
+      // Get existing family members
+      const members = await storage.getFamilyMembers(req.user.id);
+
+      // Check if family member limit is reached (max 5 accounts including owner)
+      if (members.length >= 4) { // 4 additional members + 1 owner = 5 total
+        return res.status(403).json({
+          error: "Family account limit reached (maximum 5 accounts)"
+        });
+      }
+
+      // Create invitation code
+      const { email, expiresInDays } = req.body;
+      const invitation = await storage.createFamilyInvitationCode(
+        req.user.id,
+        email,
+        expiresInDays || 7
+      );
+
+      res.json({
+        success: true,
+        invitation: {
+          code: invitation.code,
+          email: invitation.email,
+          expiresAt: invitation.expiresAt
+        }
+      });
+    } catch (error) {
+      console.error("Error creating family invitation:", error);
+      res.status(500).json({ error: "Failed to create family invitation" });
+    }
+  });
+
+  // Get family invitation codes
+  app.get("/api/family/invitations", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    try {
+      // Check if user is a family owner
+      const isOwner = await storage.isFamilyOwner(req.user.id);
+      if (!isOwner) {
+        return res.status(403).json({
+          error: "Only family account owners can view invitation codes"
+        });
+      }
+
+      // Get invitation codes
+      const invitations = await storage.getFamilyInvitationsByOwner(req.user.id);
+
+      res.json({
+        success: true,
+        invitations: invitations.map(inv => ({
+          code: inv.code,
+          email: inv.email,
+          createdAt: inv.createdAt,
+          expiresAt: inv.expiresAt,
+          isUsed: inv.isUsed,
+          usedByUserId: inv.usedByUserId
+        }))
+      });
+    } catch (error) {
+      console.error("Error getting family invitations:", error);
+      res.status(500).json({ error: "Failed to get family invitations" });
+    }
+  });
+
+  // Join family with invitation code
+  app.post("/api/family/join", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    try {
+      const { code } = req.body;
+
+      if (!code) {
+        return res.status(400).json({ error: "Invitation code is required" });
+      }
+
+      // Get invitation by code
+      const invitation = await storage.getFamilyInvitationByCode(code);
+
+      if (!invitation) {
+        return res.status(404).json({ error: "Invalid invitation code" });
+      }
+
+      // Check if invitation is expired
+      if (invitation.expiresAt < new Date()) {
+        return res.status(403).json({ error: "Invitation code has expired" });
+      }
+
+      // Check if invitation is already used
+      if (invitation.isUsed) {
+        return res.status(403).json({ error: "Invitation code has already been used" });
+      }
+
+      // Get the family owner
+      const owner = await storage.getUser(invitation.ownerUserId);
+      if (!owner) {
+        return res.status(404).json({ error: "Family owner account not found" });
+      }
+
+      // Check if owner still has a valid family subscription
+      const ownerSubscription = await storage.getUserSubscriptionDetails(owner.id);
+      if (!ownerSubscription.hasSubscription ||
+          (ownerSubscription.type !== "unlimited" && ownerSubscription.type !== "family")) {
+        return res.status(403).json({
+          error: "Family owner no longer has an active family subscription"
+        });
+      }
+
+      // Update user to be part of the family
+      await db.update(users)
+        .set({
+          familyOwnerId: invitation.ownerUserId
+        })
+        .where(eq(users.id, req.user.id));
+
+      // Mark invitation as used
+      await storage.markFamilyInvitationAsUsed(code, req.user.id);
+
+      res.json({
+        success: true,
+        message: "Successfully joined family account"
+      });
+    } catch (error) {
+      console.error("Error joining family account:", error);
+      res.status(500).json({ error: "Failed to join family account" });
+    }
+  });
 
   // Get family members
   app.get("/api/family/members", async (req, res) => {
@@ -1519,10 +1956,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const validatedData = schema.parse(req.body);
 
+      // Add the payment method to our database
       const paymentMethod = await storage.addUserPaymentMethod({
         userId: req.user.id,
         ...validatedData
       });
+
+      // If this is the first payment method or is set as default,
+      // check if the user has an active subscription and update it in Stripe
+      if (validatedData.isDefault || paymentMethod.isDefault) {
+        const stripeSubscription = await storage.getStripeSubscription(req.user.id);
+
+        if (stripeSubscription?.stripeSubscriptionId) {
+          // In a real implementation, we would update the payment method in Stripe
+          // await stripe.subscriptions.update(stripeSubscription.stripeSubscriptionId, {
+          //   default_payment_method: validatedData.stripePaymentMethodId
+          // });
+          console.log(`Updated default payment method for subscription ${stripeSubscription.stripeSubscriptionId}`);
+        }
+      }
 
       return res.json(paymentMethod);
     } catch (error) {
@@ -1738,6 +2190,128 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Error fetching app settings:", error);
       res.status(500).json({ error: "Failed to fetch app settings" });
     }
+  });
+
+  // Admin logout endpoint - clear server-side session
+  app.post("/api/admin/logout", async (req, res) => {
+    console.log("Admin logout requested");
+
+    // Get the session token from the request if available
+    const sessionToken = req.headers.authorization?.replace('Bearer ', '') ||
+                         req.body?.sessionToken;
+
+    // Special handling for the hardcoded admin user (ID 999999)
+    const isHardcodedAdmin = req.isAuthenticated() && req.user?.id === 999999;
+    if (isHardcodedAdmin) {
+      console.log("Logging out hardcoded admin user (ID 999999)");
+    }
+
+    // If we have a session token, deactivate it in the database
+    if (sessionToken) {
+      try {
+        console.log("Deactivating user session token:", sessionToken);
+        await storage.deactivateSession(sessionToken);
+      } catch (error) {
+        console.error("Error deactivating session token:", error);
+      }
+    }
+
+    // If the user is authenticated, also deactivate all their sessions
+    if (req.isAuthenticated() && req.user?.id) {
+      try {
+        console.log("Deactivating all sessions for user ID:", req.user.id);
+        await storage.deactivateAllUserSessions(req.user.id);
+      } catch (error) {
+        console.error("Error deactivating all user sessions:", error);
+      }
+    }
+
+    // Also try to deactivate sessions for the admin user by username
+    try {
+      const adminUser = await storage.getUserByUsername('admin');
+      if (adminUser) {
+        console.log("Found admin user in database, deactivating all sessions for user ID:", adminUser.id);
+        await storage.deactivateAllUserSessions(adminUser.id);
+      }
+    } catch (error) {
+      console.error("Error deactivating admin user sessions:", error);
+    }
+
+    // Create a promise-based wrapper for the logout process
+    const logoutPromise = new Promise<void>((resolve) => {
+      // Force logout the user from passport
+      if (req.isAuthenticated()) {
+        console.log("Logging out authenticated user:", req.user?.username);
+        req.logout((err) => {
+          if (err) {
+            console.error("Error in passport logout:", err);
+          }
+          resolve(); // Resolve regardless of error
+        });
+      } else {
+        resolve(); // No authenticated user to logout
+      }
+    });
+
+    // Handle the session destruction
+    logoutPromise.then(() => {
+      if (!req.session) {
+        console.log("No session to destroy");
+        return res.json({ success: true });
+      }
+
+      // Clear all session data
+      req.session.isAdmin = false;
+      req.session.adminUser = null;
+
+      // Create a promise for session regeneration
+      const regeneratePromise = new Promise<void>((resolve) => {
+        req.session.regenerate((err) => {
+          if (err) {
+            console.error("Error regenerating session:", err);
+          }
+          resolve(); // Resolve regardless of error
+        });
+      });
+
+      // After regeneration, destroy the session
+      regeneratePromise.then(() => {
+        // Create a promise for session destruction
+        const destroyPromise = new Promise<void>((resolve) => {
+          if (!req.session) {
+            resolve();
+            return;
+          }
+
+          req.session.destroy((err) => {
+            if (err) {
+              console.error("Error destroying admin session:", err);
+            }
+            resolve(); // Resolve regardless of error
+          });
+        });
+
+        // After destruction, clear cookies and send response
+        destroyPromise.then(() => {
+          // Clear all possible cookies
+          res.clearCookie('connect.sid', { path: '/' });
+          res.clearCookie('connect.sid');
+
+          // Also try clearing with different options in case the cookie was set with specific options
+          res.clearCookie('connect.sid', {
+            path: '/',
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production"
+          });
+
+          console.log("Admin session destroyed successfully");
+          return res.json({ success: true });
+        });
+      });
+    }).catch((error) => {
+      console.error("Error in admin logout process:", error);
+      return res.status(500).json({ error: "Logout failed" });
+    });
   });
 
   // Admin login endpoint - authenticate with server-side session
@@ -3285,8 +3859,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Use the product routes
   app.use('/api/products', createProductRoutes(storage));
 
+  // Use the user settings routes
+  app.use('/api/user', createUserSettingsRoutes(storage));
+
   // Setup Daswos AI chat routes
   app.use('/api/daswos-ai', createDaswosAiRoutes(storage));
+
+  // Setup Stripe routes
+  app.use('/api/stripe', createStripeRoutes(storage));
+
+  // Setup Payment routes
+  app.use('/api/payment', createPaymentRoutes(storage));
 
   // Setup AI search routes
   setupAiSearchRoutes(app, storage);
@@ -3303,3 +3886,5 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
   return httpServer;
 }
+
+

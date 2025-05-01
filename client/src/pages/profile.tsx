@@ -5,26 +5,28 @@ import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useLocation } from "wouter";
-import { 
-  Card, 
-  CardContent, 
-  CardDescription, 
-  CardHeader, 
+import { useAdminSettings } from "@/hooks/use-admin-settings";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
   CardTitle,
   CardFooter
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
 } from "@/components/ui/select";
+import { FixedSelect } from "@/components/ui/fixed-select";
 import { Badge } from "@/components/ui/badge";
-import { 
-  Dialog, 
-  DialogContent, 
+import {
+  Dialog,
+  DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
@@ -38,14 +40,15 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { apiRequest } from "@/lib/queryClient";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { X, Check, AlertCircle, UserPlus, User, Shield, ShieldAlert, Users, UserX, Baby, RefreshCw, Key } from "lucide-react";
+import { X, Check, AlertCircle, UserPlus, User, Shield, ShieldAlert, Users, UserX, Baby, RefreshCw, Key, LogOut as LogOutIcon } from "lucide-react";
 
 export default function ProfilePage() {
-  const [planType, setPlanType] = useState<"individual" | "family">("individual");
+  const [planType, setPlanType] = useState<"limited" | "unlimited">("limited");
   const [billingCycle, setBillingCycle] = useState<"monthly" | "annual">("monthly");
   const [action, setAction] = useState<"subscribe" | "switch" | "cancel" | undefined>(undefined);
   const [showConfirmCancel, setShowConfirmCancel] = useState(false);
   const [showConfirmUpdate, setShowConfirmUpdate] = useState(false);
+  const [showPaymentSetup, setShowPaymentSetup] = useState(false);
   const [newFamilyMemberEmail, setNewFamilyMemberEmail] = useState("");
   const [childName, setChildName] = useState("");
   const [showCreateChildDialog, setShowCreateChildDialog] = useState(false);
@@ -58,18 +61,31 @@ export default function ProfilePage() {
     blockAdultContent: true,
     blockOpenSphere: false
   });
-  
-  const { user, hasSubscription, subscriptionDetails, subscriptionMutation, isCheckingSubscription } = useAuth();
+
+  const { user, hasSubscription, subscriptionDetails, subscriptionMutation, isCheckingSubscription, isLoading: isAuthLoading } = useAuth();
+  const { settings } = useAdminSettings();
   const { toast } = useToast();
   const isMobile = useIsMobile();
   const [, navigate] = useLocation();
-  
+
+  // Additional direct API call to fetch user data
+  const { data: userData, isLoading: isUserDataLoading } = useQuery({
+    queryKey: ['/api/user'],
+    enabled: !!user, // Only run if we have a user from auth context
+    refetchOnWindowFocus: false,
+    staleTime: 30000 // 30 seconds
+  });
+
+  // Use either the user from auth context or the directly fetched user data
+  const displayUser = userData || user;
+  const isLoading = isAuthLoading || isUserDataLoading;
+
   // Fetch SuperSafe status
   const { data: superSafeStatus, isLoading: isLoadingSuperSafe } = useQuery({
     queryKey: ['/api/user/supersafe'],
     enabled: !!user
   });
-  
+
   // Effect to update local state when SuperSafe status is fetched
   useEffect(() => {
     if (superSafeStatus && typeof superSafeStatus === 'object') {
@@ -80,19 +96,48 @@ export default function ProfilePage() {
       }
     }
   }, [superSafeStatus]);
-  
+
+  // Check for setup_payment parameter in URL
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const setupPayment = urlParams.get('setup_payment');
+
+    if (setupPayment === 'true' && subscriptionDetails?.type === 'unlimited') {
+      // Show payment setup dialog or scroll to payment section
+      setShowPaymentSetup(true);
+      setPlanType('unlimited');
+
+      // Show a toast notification
+      toast({
+        title: "Payment Setup Required",
+        description: "Please complete your payment setup for Daswos Unlimited",
+        variant: "default",
+      });
+
+      // Scroll to subscription section
+      const subscriptionSection = document.getElementById('subscription-section');
+      if (subscriptionSection) {
+        subscriptionSection.scrollIntoView({ behavior: 'smooth' });
+      }
+
+      // Clean up the URL parameter
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, document.title, newUrl);
+    }
+  }, [subscriptionDetails, toast]);
+
   // Fetch family members if the user is a family owner
   const { data: familyMembers = [], isLoading: isLoadingFamilyMembers, refetch: refetchFamilyMembers } = useQuery<any[]>({
     queryKey: ['/api/family/members'],
-    enabled: !!user && !!subscriptionDetails?.type && subscriptionDetails.type === 'family',
+    enabled: !!user && !!subscriptionDetails?.type && (subscriptionDetails.type === 'family' || subscriptionDetails.type === 'unlimited'),
     refetchOnWindowFocus: true,
     refetchInterval: 10000 // Refetch every 10 seconds for testing
   });
-  
+
   // Also refetch when subscription details change
   useEffect(() => {
-    if (subscriptionDetails?.type === 'family') {
-      console.log('Subscription details changed to family type, refetching family members');
+    if (subscriptionDetails?.type === 'family' || subscriptionDetails?.type === 'unlimited') {
+      console.log('Subscription details changed to family or unlimited type, refetching family members');
       refetchFamilyMembers();
     }
   }, [subscriptionDetails, refetchFamilyMembers]);
@@ -100,11 +145,27 @@ export default function ProfilePage() {
   useEffect(() => {
     // Set the selected plan to match the user's current subscription
     if (subscriptionDetails?.type) {
-      setPlanType(subscriptionDetails.type as "individual" | "family");
+      console.log("Setting plan type from subscription details:", subscriptionDetails.type);
+      setPlanType(subscriptionDetails.type as "limited" | "unlimited" | "individual" | "family");
+    }
+
+    // Also set the billing cycle if available
+    if (subscriptionDetails?.billingCycle) {
+      console.log("Setting billing cycle from subscription details:", subscriptionDetails.billingCycle);
+      setBillingCycle(subscriptionDetails.billingCycle as "monthly" | "annual");
     }
   }, [subscriptionDetails]);
 
+  // Update the plan type dropdown options when billing cycle changes
+  useEffect(() => {
+    // This will force a re-render of the dropdown options with the updated price
+    const currentPlanType = planType;
+    setPlanType(currentPlanType);
+  }, [billingCycle]);
+
   const handleSubscriptionAction = (action: "subscribe" | "switch" | "cancel") => {
+    console.log(`Subscription action triggered: ${action}, planType: ${planType}, billingCycle: ${billingCycle}`);
+
     if (action === "cancel") {
       setShowConfirmCancel(true);
       return;
@@ -121,7 +182,7 @@ export default function ProfilePage() {
         });
         return;
       }
-      
+
       setShowConfirmUpdate(true);
       return;
     }
@@ -135,26 +196,69 @@ export default function ProfilePage() {
       return;
     }
 
+    // Check if admin settings might be preventing subscription
+    if (settings.paidFeaturesDisabled) {
+      toast({
+        title: "Premium Features Disabled",
+        description: "The administrator has currently disabled all premium features. Please contact the administrator.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (settings.subscriptionDevMode) {
+      toast({
+        title: "Subscription Development Mode",
+        description: "Subscriptions are currently in development mode. All premium features are available without requiring a subscription.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Validate that we have a valid plan type selected
+    if (!planType || (planType !== "limited" && planType !== "unlimited")) {
+      console.error(`Invalid plan type selected: ${planType}`);
+      toast({
+        title: "Invalid Plan",
+        description: "Please select a valid subscription plan",
+        variant: "destructive"
+      });
+      return;
+    }
+
     setAction(action);
-    
-    subscriptionMutation.mutate({ 
-      type: planType, 
-      billingCycle, 
-      action 
+    console.log(`Submitting subscription mutation: type=${planType}, billingCycle=${billingCycle}, action=${action}`);
+
+    subscriptionMutation.mutate({
+      type: planType,
+      billingCycle,
+      action
     }, {
-      onSuccess: () => {
+      onSuccess: (data) => {
+        console.log("Subscription mutation successful:", data);
+
+        // Refresh the subscription data
+        queryClient.invalidateQueries({ queryKey: ["/api/user/subscription"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+
+        // Force update the UI to reflect the new plan type
+        if (data && data.type) {
+          setPlanType(data.type as "limited" | "unlimited");
+        }
+
         toast({
           title: action === "subscribe" ? "Subscription Updated" : "Subscription Changed",
-          description: action === "subscribe" 
-            ? "Your subscription has been activated" 
+          description: action === "subscribe"
+            ? "Your subscription has been activated"
             : "Your subscription plan has been changed",
           variant: "default"
         });
-        
+
         // Close any open dialogs
         setShowConfirmUpdate(false);
       },
       onError: (error) => {
+        console.error("Subscription mutation error:", error);
         toast({
           title: "Subscription Error",
           description: error.message || "An error occurred while processing your subscription",
@@ -163,15 +267,26 @@ export default function ProfilePage() {
       }
     });
   };
-  
+
   const confirmUpdateSubscription = () => {
     setShowConfirmUpdate(false);
-    subscriptionMutation.mutate({ 
-      type: planType, 
+    subscriptionMutation.mutate({
+      type: planType,
       billingCycle,
-      action: "switch" 
+      action: "switch"
     }, {
-      onSuccess: () => {
+      onSuccess: (data) => {
+        console.log("Subscription update successful:", data);
+
+        // Refresh the subscription data
+        queryClient.invalidateQueries({ queryKey: ["/api/user/subscription"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+
+        // Force update the UI to reflect the new plan type
+        if (data && data.type) {
+          setPlanType(data.type as "limited" | "unlimited");
+        }
+
         toast({
           title: "Subscription Updated",
           description: "Your subscription has been updated successfully",
@@ -179,6 +294,7 @@ export default function ProfilePage() {
         });
       },
       onError: (error) => {
+        console.error("Subscription update error:", error);
         toast({
           title: "Failed to Update Subscription",
           description: error.message || "Something went wrong",
@@ -189,8 +305,8 @@ export default function ProfilePage() {
   };
 
   const confirmCancelSubscription = () => {
-    subscriptionMutation.mutate({ 
-      type: planType, 
+    subscriptionMutation.mutate({
+      type: planType,
       billingCycle,
       action: "cancel"
     }, {
@@ -211,7 +327,106 @@ export default function ProfilePage() {
       }
     });
   };
-  
+
+  // Special function to handle Unlimited subscription directly
+  const subscribeToUnlimited = () => {
+    console.log("Executing direct subscription to Unlimited plan");
+
+    if (!user) {
+      toast({
+        title: "Login Required",
+        description: "Please log in to subscribe",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Check if admin settings might be preventing subscription
+    if (settings.paidFeaturesDisabled) {
+      toast({
+        title: "Premium Features Disabled",
+        description: "The administrator has currently disabled all premium features. Please contact the administrator.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (settings.subscriptionDevMode) {
+      toast({
+        title: "Subscription Development Mode",
+        description: "Subscriptions are currently in development mode. All premium features are available without requiring a subscription.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Show a loading toast
+    toast({
+      title: "Processing",
+      description: "Setting up your Unlimited subscription...",
+      variant: "default"
+    });
+
+    console.log("Sending subscription request with:", {
+      type: "unlimited",
+      billingCycle: billingCycle,
+      action: "subscribe"
+    });
+
+    // Direct API call to subscribe to Unlimited plan
+    fetch('/api/user/subscription', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        type: "unlimited",
+        billingCycle: billingCycle,
+        action: "subscribe"
+      })
+    })
+    .then(response => {
+      console.log("Subscription response status:", response.status);
+      if (!response.ok) {
+        return response.text().then(text => {
+          console.error("Error response body:", text);
+          throw new Error(`HTTP error! Status: ${response.status}, Body: ${text}`);
+        });
+      }
+      return response.json();
+    })
+    .then(data => {
+      console.log("Unlimited subscription successful:", data);
+
+      // Refresh the subscription data
+      queryClient.invalidateQueries({ queryKey: ["/api/user/subscription"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+
+      // Force update the UI to reflect the new plan type
+      setPlanType("unlimited");
+
+      // Force a refresh to ensure the UI updates
+      setTimeout(() => {
+        // This will trigger a re-render with the latest subscription data
+        queryClient.invalidateQueries({ queryKey: ["/api/user/subscription"] });
+      }, 500);
+
+      toast({
+        title: "Subscription Activated",
+        description: "Your Daswos Unlimited plan has been activated successfully!",
+        variant: "default"
+      });
+    })
+    .catch(error => {
+      console.error("Error subscribing to Unlimited plan:", error);
+      toast({
+        title: "Subscription Failed",
+        description: "There was an error activating your Unlimited subscription. Please try again or contact support.",
+        variant: "destructive"
+      });
+    });
+  };
+
   // SuperSafe Toggle mutations
   const updateSuperSafeMutation = useMutation({
     mutationFn: async (data: { enabled: boolean, settings?: any }) => {
@@ -233,7 +448,7 @@ export default function ProfilePage() {
       });
     }
   });
-  
+
   // Handle SuperSafe toggle
   const toggleSuperSafe = (enabled: boolean) => {
     setSuperSafeEnabled(enabled);
@@ -242,7 +457,7 @@ export default function ProfilePage() {
       settings: superSafeSettings
     });
   };
-  
+
   // Handle SuperSafe settings change
   const updateSuperSafeSettings = (setting: string, value: boolean) => {
     const newSettings = {
@@ -250,7 +465,7 @@ export default function ProfilePage() {
       [setting]: value
     };
     setSuperSafeSettings(newSettings);
-    
+
     // Only update if SuperSafe is enabled
     if (superSafeEnabled) {
       updateSuperSafeMutation.mutate({
@@ -259,7 +474,7 @@ export default function ProfilePage() {
       });
     }
   };
-  
+
   // Family member mutations
   const addFamilyMemberMutation = useMutation({
     mutationFn: async (email: string) => {
@@ -282,7 +497,7 @@ export default function ProfilePage() {
       });
     }
   });
-  
+
   // Remove family member
   const removeFamilyMemberMutation = useMutation({
     mutationFn: async (memberId: number) => {
@@ -304,7 +519,7 @@ export default function ProfilePage() {
       });
     }
   });
-  
+
   // Update family member's SuperSafe settings
   const updateFamilyMemberSuperSafeMutation = useMutation({
     mutationFn: async ({ memberId, enabled, settings }: { memberId: number, enabled: boolean, settings?: any }) => {
@@ -325,7 +540,7 @@ export default function ProfilePage() {
       });
     }
   });
-  
+
   // Create child account mutation
   const createChildAccountMutation = useMutation({
     mutationFn: async (childName: string) => {
@@ -334,16 +549,16 @@ export default function ProfilePage() {
     },
     onSuccess: (data: any) => {
       console.log("Child account created successfully:", data);
-      
+
       toast({
         title: "Child Account Created",
         description: "A new child account has been created successfully",
         variant: "default"
       });
-      
+
       setChildName("");
       setShowCreateChildDialog(false);
-      
+
       // Make sure we have the account information
       if (data && data.account && data.account.username && data.account.password) {
         setChildAccountInfo(data.account);
@@ -356,7 +571,7 @@ export default function ProfilePage() {
           variant: "destructive"
         });
       }
-      
+
       // Refresh the family members list
       refetchFamilyMembers();
     },
@@ -369,7 +584,7 @@ export default function ProfilePage() {
       });
     }
   });
-  
+
   // Update child account password mutation
   const updateChildPasswordMutation = useMutation({
     mutationFn: async ({ childId, newPassword }: { childId: number, newPassword: string }) => {
@@ -391,7 +606,7 @@ export default function ProfilePage() {
       });
     }
   });
-  
+
   // Update child account username mutation
   const updateChildUsernameMutation = useMutation({
     mutationFn: async ({ childId, newUsername }: { childId: number, newUsername: string }) => {
@@ -404,7 +619,7 @@ export default function ProfilePage() {
         description: data?.message || "The child account username has been updated",
         variant: "default"
       });
-      
+
       // Refetch family members to get updated data (when backend implementation is complete)
       if (data?.success) {
         refetchFamilyMembers();
@@ -419,15 +634,28 @@ export default function ProfilePage() {
     }
   });
 
-  if (!user) {
+  if (isLoading) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <h1 className="text-3xl font-bold mb-6">Profile</h1>
+        <Card>
+          <CardContent className="pt-6">
+            <p>Loading profile information...</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!displayUser) {
     return (
       <div className="container mx-auto px-4 py-8">
         <h1 className="text-3xl font-bold mb-6">Profile</h1>
         <Card>
           <CardContent className="pt-6">
             <p>Please log in to view your profile</p>
-            <Button 
-              className="mt-4" 
+            <Button
+              className="mt-4"
               onClick={() => navigate("/auth")}
             >
               Login
@@ -441,15 +669,23 @@ export default function ProfilePage() {
   // Diagnostic output for testing
   const diagnosticData = {
     user: user ? { id: user.id, username: user.username } : null,
+    displayUser: displayUser ? { id: displayUser.id, username: displayUser.username, email: displayUser.email } : null,
+    userData: userData ? { id: userData.id, username: userData.username, email: userData.email } : null,
     hasSubscription: hasSubscription,
     subscriptionDetails: subscriptionDetails,
-    isLoading: isCheckingSubscription
+    isLoading: isLoading,
+    isAuthLoading: isAuthLoading,
+    isUserDataLoading: isUserDataLoading,
+    isCheckingSubscription: isCheckingSubscription
   };
+
+  // Log user data for debugging
+  console.log("User data in profile page:", { user, userData, displayUser });
 
   return (
     <div className="container mx-auto px-4 py-8">
       <h1 className="text-3xl font-bold mb-6">Profile</h1>
-      
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
         {/* User Information */}
         <Card className="col-span-1">
@@ -458,40 +694,58 @@ export default function ProfilePage() {
             <CardDescription>Your account information</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              <div>
-                <strong className="text-sm text-muted-foreground">Username:</strong>
-                <p>{user.username}</p>
+            {isLoading ? (
+              <div className="space-y-4">
+                <p>Loading user information...</p>
               </div>
-              <div>
-                <strong className="text-sm text-muted-foreground">Email:</strong>
-                <p>{user.email}</p>
+            ) : displayUser ? (
+              <div className="space-y-4">
+                <div>
+                  <strong className="text-sm text-muted-foreground">Username:</strong>
+                  <p>{displayUser.username || 'Not available'}</p>
+                </div>
+                <div>
+                  <strong className="text-sm text-muted-foreground">Email:</strong>
+                  <p>{displayUser.email || 'Not available'}</p>
+                </div>
+                <div>
+                  <strong className="text-sm text-muted-foreground">Full Name:</strong>
+                  <p>{displayUser.fullName || 'Not available'}</p>
+                </div>
+                <div>
+                  <strong className="text-sm text-muted-foreground">Account Type:</strong>
+                  <p>
+                    {displayUser.isSeller
+                      ? "Seller"
+                      : subscriptionDetails?.type
+                        ? subscriptionDetails.type === 'limited'
+                          ? "Daswos Limited"
+                          : subscriptionDetails.type === 'unlimited'
+                            ? "Daswos Unlimited"
+                            : subscriptionDetails.type === 'individual'
+                              ? "Individual (Legacy)"
+                              : subscriptionDetails.type === 'family'
+                                ? "Family (Legacy)"
+                                : `${subscriptionDetails.type.charAt(0).toUpperCase() + subscriptionDetails.type.slice(1)}`
+                        : "Limited"}
+                  </p>
+                </div>
+                {hasSubscription && (
+                  <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                    Active Subscription
+                  </Badge>
+                )}
               </div>
-              <div>
-                <strong className="text-sm text-muted-foreground">Full Name:</strong>
-                <p>{user.fullName}</p>
+            ) : (
+              <div className="space-y-4">
+                <p>User information not available</p>
               </div>
-              <div>
-                <strong className="text-sm text-muted-foreground">Account Type:</strong>
-                <p>
-                  {user.isSeller 
-                    ? "Seller" 
-                    : subscriptionDetails?.type 
-                      ? `${subscriptionDetails.type.charAt(0).toUpperCase() + subscriptionDetails.type.slice(1)}` 
-                      : "Standard"}
-                </p>
-              </div>
-              {hasSubscription && (
-                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                  Active Subscription
-                </Badge>
-              )}
-            </div>
+            )}
           </CardContent>
         </Card>
 
         {/* Subscription Management */}
-        <Card className="col-span-1 md:col-span-2">
+        <Card className="col-span-1 md:col-span-2" id="subscription-section">
           <CardHeader>
             <div className="flex justify-between items-center">
               <CardTitle>Subscription</CardTitle>
@@ -502,22 +756,52 @@ export default function ProfilePage() {
               )}
             </div>
             <CardDescription>
-              {hasSubscription 
-                ? "Manage your SafeSphere subscription" 
-                : "Subscribe to SafeSphere for added security"}
+              {hasSubscription
+                ? "Manage your Daswos subscription"
+                : "Subscribe to Daswos for added security"}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {isCheckingSubscription ? (
+            {settings.subscriptionDevMode && (
+              <Alert className="mb-4">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Subscription Development Mode</AlertTitle>
+                <AlertDescription>
+                  Subscriptions are currently in development mode. All premium features are available to all users without requiring a subscription.
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {showPaymentSetup && (
+              <Alert className="mb-4 border-amber-500">
+                <AlertCircle className="h-4 w-4 text-amber-500" />
+                <AlertTitle>Payment Setup Required</AlertTitle>
+                <AlertDescription>
+                  Your Daswos Unlimited subscription has been activated. Please complete your payment setup below to continue using premium features.
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {isCheckingSubscription || isLoading ? (
               <div className="text-center py-4">
                 <p>Loading subscription details...</p>
+              </div>
+            ) : !displayUser ? (
+              <div className="text-center py-4">
+                <p>User information not available</p>
               </div>
             ) : hasSubscription ? (
               <div className="space-y-6">
                 <div className="space-y-3">
                   <div>
                     <strong className="text-sm text-muted-foreground">Current Plan:</strong>
-                    <p className="capitalize">{subscriptionDetails?.type || "Individual"} Plan</p>
+                    <p className="capitalize">
+                      {subscriptionDetails?.type === 'limited' ? 'Daswos Limited' :
+                       subscriptionDetails?.type === 'unlimited' ? 'Daswos Unlimited' :
+                       subscriptionDetails?.type === 'individual' ? 'Individual (Legacy)' :
+                       subscriptionDetails?.type === 'family' ? 'Family (Legacy)' :
+                       subscriptionDetails?.type || "Daswos Limited"} Plan
+                    </p>
                   </div>
                   {subscriptionDetails?.expiresAt && (
                     <div>
@@ -527,127 +811,208 @@ export default function ProfilePage() {
                   )}
                 </div>
 
-                <div className="space-y-3">
+                <div className="space-y-6">
                   <h3 className="text-lg font-semibold">Change Plan</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-sm text-muted-foreground">Plan Type</label>
-                      <Select 
-                        value={planType} 
-                        onValueChange={(value) => setPlanType(value as "individual" | "family")}
+
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Billing Cycle</label>
+                    <div className="grid grid-cols-2 gap-2 mb-4">
+                      <Button
+                        variant={billingCycle === "monthly" ? "default" : "outline"}
+                        onClick={() => setBillingCycle("monthly")}
+                        className="w-full"
                       >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select plan type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem 
-                            value="individual" 
-                            disabled={subscriptionDetails?.type === "individual"}
-                          >
-                            Individual Plan {subscriptionDetails?.type === "individual" && "- Current"}
-                          </SelectItem>
-                          <SelectItem 
-                            value="family" 
-                            disabled={subscriptionDetails?.type === "family"}
-                          >
-                            Family Plan {subscriptionDetails?.type === "family" && "- Current"}
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <label className="text-sm text-muted-foreground">Billing Cycle</label>
-                      <Select 
-                        value={billingCycle} 
-                        onValueChange={(value) => setBillingCycle(value as "monthly" | "annual")}
+                        Monthly
+                      </Button>
+                      <Button
+                        variant={billingCycle === "annual" ? "default" : "outline"}
+                        onClick={() => setBillingCycle("annual")}
+                        className="w-full"
                       >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select billing cycle" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="monthly">Monthly</SelectItem>
-                          <SelectItem value="annual">Annual (Save 15%)</SelectItem>
-                        </SelectContent>
-                      </Select>
+                        Annual (Save 15%)
+                      </Button>
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap gap-3 pt-3">
-                    <Button 
-                      variant="default"
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Button
+                      variant={subscriptionDetails?.type === "limited" ? "default" : "outline"}
                       disabled={subscriptionMutation.isPending}
-                      onClick={() => handleSubscriptionAction("switch")}
+                      onClick={() => {
+                        setPlanType("limited");
+                        // Use the confirm update function directly to ensure proper state updates
+                        setShowConfirmUpdate(true);
+                      }}
+                      className="h-auto py-4"
                     >
-                      Update Plan
+                      <div className="flex flex-col items-center">
+                        <span className="text-lg font-medium">Daswos Limited</span>
+                        <span className="text-sm text-muted-foreground">Free</span>
+                      </div>
                     </Button>
-                    <Button 
-                      variant="destructive"
+                    <Button
+                      variant={subscriptionDetails?.type === "unlimited" ? "default" : "outline"}
                       disabled={subscriptionMutation.isPending}
-                      onClick={() => handleSubscriptionAction("cancel")}
+                      onClick={() => {
+                        setPlanType("unlimited");
+                        // Use the confirm update function directly to ensure proper state updates
+                        setShowConfirmUpdate(true);
+                      }}
+                      className="h-auto py-4"
                     >
-                      Cancel Subscription
+                      <div className="flex flex-col items-center">
+                        <span className="text-lg font-medium">Daswos Unlimited</span>
+                        <span className="text-sm">{billingCycle === "monthly" ? "£5/month" : "£51/year (Save 15%)"}</span>
+                      </div>
                     </Button>
                   </div>
+
+                  <Button
+                    variant="destructive"
+                    disabled={subscriptionMutation.isPending}
+                    onClick={() => handleSubscriptionAction("cancel")}
+                    className="w-full"
+                  >
+                    {subscriptionMutation.isPending ? 'Cancelling...' : 'Cancel Subscription'}
+                  </Button>
                 </div>
               </div>
             ) : (
               <div className="space-y-6">
-                <p>You don't have an active subscription. Subscribe to SafeSphere to access premium security features.</p>
-                
-                <div className="space-y-3">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-sm text-muted-foreground">Plan Type</label>
-                      <Select 
-                        value={planType} 
-                        onValueChange={(value) => setPlanType(value as "individual" | "family")}
+                <div className="mb-4">
+                  <p>You don't have an active subscription. Subscribe to Daswos to access premium security features.</p>
+                </div>
+
+                <div className="space-y-6">
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Billing Cycle</label>
+                    <div className="grid grid-cols-2 gap-2 mb-4">
+                      <Button
+                        variant={billingCycle === "monthly" ? "default" : "outline"}
+                        onClick={() => setBillingCycle("monthly")}
+                        className="w-full"
                       >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select plan type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="individual">Individual Plan (£3/month)</SelectItem>
-                          <SelectItem value="family">Family Plan (£7/month)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <label className="text-sm text-muted-foreground">Billing Cycle</label>
-                      <Select 
-                        value={billingCycle} 
-                        onValueChange={(value) => setBillingCycle(value as "monthly" | "annual")}
+                        Monthly
+                      </Button>
+                      <Button
+                        variant={billingCycle === "annual" ? "default" : "outline"}
+                        onClick={() => setBillingCycle("annual")}
+                        className="w-full"
                       >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select billing cycle" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="monthly">Monthly</SelectItem>
-                          <SelectItem value="annual">Annual (Save 15%)</SelectItem>
-                        </SelectContent>
-                      </Select>
+                        Annual (Save 15%)
+                      </Button>
                     </div>
                   </div>
 
-                  <div className="pt-3">
-                    <Button 
-                      variant="default"
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Button
+                      variant={planType === "limited" ? "default" : "outline"}
                       disabled={subscriptionMutation.isPending}
-                      onClick={() => handleSubscriptionAction("subscribe")}
+                      onClick={() => {
+                        setPlanType("limited");
+                        handleSubscriptionAction("subscribe");
+                      }}
+                      className="h-auto py-4"
                     >
-                      Subscribe Now
+                      <div className="flex flex-col items-center">
+                        <span className="text-lg font-medium">Daswos Limited</span>
+                        <span className="text-sm text-muted-foreground">Free</span>
+                      </div>
+                    </Button>
+                    <Button
+                      variant={planType === "unlimited" ? "default" : "outline"}
+                      disabled={subscriptionMutation.isPending}
+                      onClick={() => {
+                        console.log("Unlimited subscription button clicked");
+                        setPlanType("unlimited");
+                        subscribeToUnlimited();
+                      }}
+                      className="h-auto py-4"
+                    >
+                      <div className="flex flex-col items-center">
+                        <span className="text-lg font-medium">Daswos Unlimited</span>
+                        <span className="text-sm">{billingCycle === "monthly" ? "£5/month" : "£51/year (Save 15%)"}</span>
+                      </div>
                     </Button>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Diagnostic data for development purposes */}
-            {process.env.NODE_ENV === 'development' && (
+            {/* Diagnostic data for admin user only */}
+            {((process.env.NODE_ENV === 'development' || settings.debugMode) && displayUser?.username === 'admin') && (
               <div className="mt-8 p-4 border border-dashed rounded-md">
                 <h3 className="text-sm font-semibold mb-2">Debug Info:</h3>
-                <pre className="text-xs overflow-auto">
-                  {JSON.stringify(diagnosticData, null, 2)}
-                </pre>
+                <div className="text-xs space-y-2">
+                  <div>
+                    <strong>Current Plan Type:</strong> {planType}
+                  </div>
+                  <div>
+                    <strong>Billing Cycle:</strong> {billingCycle}
+                  </div>
+                  <div>
+                    <strong>Has Subscription:</strong> {hasSubscription ? 'Yes' : 'No'}
+                  </div>
+                  <div>
+                    <strong>Admin Settings:</strong>
+                    <ul className="list-disc pl-4 mt-1">
+                      <li>Paid Features Disabled: {settings.paidFeaturesDisabled ? 'Yes' : 'No'}</li>
+                      <li>Subscription Dev Mode: {settings.subscriptionDevMode ? 'Yes' : 'No'}</li>
+                    </ul>
+                  </div>
+                  <div>
+                    <strong>Subscription Details:</strong>
+                    <pre className="overflow-auto mt-1">
+                      {JSON.stringify(subscriptionDetails, null, 2)}
+                    </pre>
+                  </div>
+                  <div>
+                    <strong>All Diagnostic Data:</strong>
+                    <pre className="overflow-auto mt-1">
+                      {JSON.stringify(diagnosticData, null, 2)}
+                    </pre>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Admin logout button */}
+            {displayUser?.username === 'admin' && (
+              <div className="mt-6 pt-6 border-t">
+                <Button
+                  variant="destructive"
+                  className="w-full"
+                  onClick={async () => {
+                    try {
+                      // Call the server-side admin logout endpoint
+                      const response = await fetch("/api/admin/logout", {
+                        method: "POST",
+                        credentials: "include" // Important: include cookies
+                      });
+
+                      if (!response.ok) {
+                        throw new Error("Logout failed");
+                      }
+
+                      // Clear client-side admin session
+                      sessionStorage.removeItem("adminAuthenticated");
+                      sessionStorage.removeItem("adminUser");
+
+                      // Clear any regular user session cookies
+                      document.cookie = "connect.sid=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+
+                      // Force a complete page reload to clear any in-memory state
+                      window.location.href = "/admin-login";
+                    } catch (error) {
+                      console.error("Error logging out:", error);
+                      // Still try to redirect even if the server call fails
+                      window.location.href = "/admin-login";
+                    }
+                  }}
+                >
+                  <LogOutIcon className="h-4 w-4 mr-2" />
+                  Admin Logout
+                </Button>
               </div>
             )}
           </CardContent>
@@ -655,7 +1020,7 @@ export default function ProfilePage() {
       </div>
 
       {/* SuperSafe Mode & Family Management Section */}
-      {hasSubscription && (
+      {hasSubscription && !settings.subscriptionDevMode && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
           {/* SuperSafe Mode */}
           <Card>
@@ -712,7 +1077,7 @@ export default function ProfilePage() {
                           disabled={updateSuperSafeMutation.isPending}
                         />
                       </div>
-                      
+
                       <div className="flex items-center justify-between">
                         <div>
                           <Label
@@ -729,7 +1094,7 @@ export default function ProfilePage() {
                           disabled={updateSuperSafeMutation.isPending}
                         />
                       </div>
-                      
+
                       <div className="flex items-center justify-between">
                         <div>
                           <Label
@@ -755,7 +1120,7 @@ export default function ProfilePage() {
           </Card>
 
           {/* Family Management */}
-          {subscriptionDetails?.type === 'family' && (
+          {(subscriptionDetails?.type === 'family' || subscriptionDetails?.type === 'unlimited') && (
             <Card>
               <CardHeader>
                 <div className="flex justify-between items-center">
@@ -820,8 +1185,8 @@ export default function ProfilePage() {
                           className="h-8 px-3 text-xs"
                           onClick={() => addFamilyMemberMutation.mutate(newFamilyMemberEmail)}
                           disabled={
-                            addFamilyMemberMutation.isPending || 
-                            !newFamilyMemberEmail || 
+                            addFamilyMemberMutation.isPending ||
+                            !newFamilyMemberEmail ||
                             (familyMembers && familyMembers.length >= 4)
                           }
                         >
@@ -830,7 +1195,7 @@ export default function ProfilePage() {
                         </Button>
                       </div>
                     </div>
-                    
+
                     {/* Child Account Management */}
                     <div className="space-y-2 pt-6 border-t mt-6">
                       <div className="flex items-center justify-between">
@@ -846,7 +1211,7 @@ export default function ProfilePage() {
                           className="h-8 px-3 text-xs"
                           onClick={() => setShowCreateChildDialog(true)}
                           disabled={
-                            createChildAccountMutation.isPending || 
+                            createChildAccountMutation.isPending ||
                             (familyMembers && familyMembers.length >= 4)
                           }
                         >
@@ -854,7 +1219,7 @@ export default function ProfilePage() {
                           Create Child Account
                         </Button>
                       </div>
-                      
+
                       {/* Display child accounts (filtered from family members) */}
                       {familyMembers && familyMembers.filter((member: any) => member.isChildAccount).length > 0 ? (
                         <div className="space-y-4 mt-3">
@@ -909,17 +1274,17 @@ export default function ProfilePage() {
                                             Manage settings for {childAccount.username}'s account
                                           </DialogDescription>
                                         </DialogHeader>
-                                        
+
                                         <div className="space-y-6 py-4">
                                           {/* Account Details */}
                                           <div className="space-y-4">
                                             <h3 className="text-sm font-medium">Account Details</h3>
-                                            
+
                                             <div className="grid gap-2">
                                               <Label htmlFor="child-username">Username</Label>
-                                              <Input 
+                                              <Input
                                                 id="child-username"
-                                                placeholder="Username" 
+                                                placeholder="Username"
                                                 type="text"
                                                 value={childAccount.newUsername || childAccount.username}
                                                 onChange={(e) => {
@@ -940,12 +1305,12 @@ export default function ProfilePage() {
                                                 Username should be fun and memorable for your child.
                                               </p>
                                             </div>
-                                            
+
                                             <div className="grid gap-2">
                                               <Label htmlFor="child-password">New Password</Label>
-                                              <Input 
+                                              <Input
                                                 id="child-password"
-                                                placeholder="Enter new password" 
+                                                placeholder="Enter new password"
                                                 type="text"
                                                 value={childAccount.newPassword || ""}
                                                 onChange={(e) => {
@@ -966,8 +1331,8 @@ export default function ProfilePage() {
                                                 Leave blank to keep the current password.
                                               </p>
                                             </div>
-                                            
-                                            <Button 
+
+                                            <Button
                                               className="w-full mt-2"
                                               onClick={() => {
                                                 if (childAccount.newPassword && childAccount.newPassword.length >= 6) {
@@ -976,7 +1341,7 @@ export default function ProfilePage() {
                                                     newPassword: childAccount.newPassword
                                                   });
                                                 }
-                                                
+
                                                 // Update username if changed
                                                 if (childAccount.newUsername && childAccount.newUsername !== childAccount.username) {
                                                   updateChildUsernameMutation.mutate({
@@ -985,13 +1350,13 @@ export default function ProfilePage() {
                                                   });
                                                 }
                                               }}
-                                              disabled={(childAccount.newPassword && childAccount.newPassword.length < 6) || 
+                                              disabled={(childAccount.newPassword && childAccount.newPassword.length < 6) ||
                                                        (!childAccount.newPassword && !childAccount.newUsername)}
                                             >
                                               Update Account Details
                                             </Button>
                                           </div>
-                                          
+
                                           {/* SuperSafe Settings */}
                                           <div className="space-y-4 border-t pt-4">
                                             <div className="flex items-center justify-between">
@@ -1002,7 +1367,7 @@ export default function ProfilePage() {
                                               <Switch
                                                 className="h-5 w-9"
                                                 checked={childAccount.superSafeMode}
-                                                onCheckedChange={(enabled) => 
+                                                onCheckedChange={(enabled) =>
                                                   updateFamilyMemberSuperSafeMutation.mutate({
                                                     memberId: childAccount.id,
                                                     enabled,
@@ -1015,7 +1380,7 @@ export default function ProfilePage() {
                                                 }
                                               />
                                             </div>
-                                            
+
                                             {childAccount.superSafeMode && (
                                               <div className="space-y-3 ml-1">
                                                 <div className="flex items-center justify-between">
@@ -1088,9 +1453,9 @@ export default function ProfilePage() {
                                             )}
                                           </div>
                                         </div>
-                                        
+
                                         <DialogFooter className="flex justify-between items-center gap-2">
-                                          <Button 
+                                          <Button
                                             variant="destructive"
                                             className="h-8 px-3 text-xs"
                                             onClick={() => removeFamilyMemberMutation.mutate(childAccount.id)}
@@ -1098,7 +1463,7 @@ export default function ProfilePage() {
                                           >
                                             Remove Account
                                           </Button>
-                                          <Button 
+                                          <Button
                                             variant="outline"
                                             type="button"
                                             onClick={() => {
@@ -1121,7 +1486,7 @@ export default function ProfilePage() {
                                     </Button>
                                   </div>
                                 </div>
-                                
+
                                 {/* SuperSafe Settings */}
                                 <div className="mt-3 pt-3 border-t border-border/40">
                                   <div className="flex items-center justify-between mb-2">
@@ -1132,7 +1497,7 @@ export default function ProfilePage() {
                                     <Switch
                                       className="h-5 w-9"
                                       checked={childAccount.superSafeMode}
-                                      onCheckedChange={(enabled) => 
+                                      onCheckedChange={(enabled) =>
                                         updateFamilyMemberSuperSafeMutation.mutate({
                                           memberId: childAccount.id,
                                           enabled,
@@ -1145,7 +1510,7 @@ export default function ProfilePage() {
                                       }
                                     />
                                   </div>
-                                  
+
                                   {childAccount.superSafeMode && (
                                     <div className="grid grid-cols-1 gap-2 pl-1 mt-2">
                                       <div className="flex items-center justify-between">
@@ -1242,13 +1607,13 @@ export default function ProfilePage() {
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end gap-3 mt-4">
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={() => setShowConfirmCancel(false)}
             >
               Keep Subscription
             </Button>
-            <Button 
+            <Button
               variant="destructive"
               disabled={subscriptionMutation.isPending}
               onClick={confirmCancelSubscription}
@@ -1258,7 +1623,7 @@ export default function ProfilePage() {
           </div>
         </DialogContent>
       </Dialog>
-      
+
       {/* Child Account Creation Dialog */}
       <Dialog open={showCreateChildDialog} onOpenChange={setShowCreateChildDialog}>
         <DialogContent>
@@ -1281,7 +1646,7 @@ export default function ProfilePage() {
                 We'll create a fun username and secure password automatically
               </p>
             </div>
-            
+
             <Alert variant="default" className="bg-primary/10 border-primary/20">
               <Baby className="h-4 w-4" />
               <AlertTitle>SuperSafe Settings</AlertTitle>
@@ -1308,7 +1673,7 @@ export default function ProfilePage() {
           </div>
         </DialogContent>
       </Dialog>
-      
+
       {/* Child Account Password Dialog */}
       <Dialog open={showChildPasswordDialog} onOpenChange={setShowChildPasswordDialog}>
         <DialogContent>
@@ -1318,7 +1683,7 @@ export default function ProfilePage() {
               We've created a child account with the following credentials:
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="space-y-4 py-3">
             {childAccountInfo && (
               <div className="bg-muted p-4 rounded-md space-y-3">
@@ -1332,7 +1697,7 @@ export default function ProfilePage() {
                 </div>
               </div>
             )}
-            
+
             <Alert variant="default" className="bg-amber-50 border-amber-200">
               <AlertCircle className="h-4 w-4 text-amber-600" />
               <AlertTitle>Important</AlertTitle>
@@ -1342,7 +1707,7 @@ export default function ProfilePage() {
               </AlertDescription>
             </Alert>
           </div>
-          
+
           <div className="flex justify-end mt-4">
             <Button
               variant="default"
@@ -1366,20 +1731,30 @@ export default function ProfilePage() {
               You are changing your subscription plan details:
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="space-y-4 py-3">
             {/* Current plan info */}
             <div className="bg-muted/30 p-3 rounded-md">
               <h4 className="font-medium text-sm mb-2">Current Plan:</h4>
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <div>Type:</div>
-                <div className="font-medium capitalize">{subscriptionDetails?.type || "Individual"} Plan</div>
-                
+                <div className="font-medium capitalize">
+                  {subscriptionDetails?.type === 'limited' ? 'Daswos Limited' :
+                   subscriptionDetails?.type === 'unlimited' ? 'Daswos Unlimited' :
+                   subscriptionDetails?.type === 'individual' ? 'Individual (Legacy)' :
+                   subscriptionDetails?.type === 'family' ? 'Family (Legacy)' :
+                   subscriptionDetails?.type || "Limited"} Plan
+                </div>
+
                 <div>Price:</div>
                 <div className="font-medium">
-                  {subscriptionDetails?.type === "individual" ? "£3" : "£7"}/month
+                  {subscriptionDetails?.type === 'limited' ? 'Free' :
+                   subscriptionDetails?.type === 'unlimited' ?
+                     (subscriptionDetails?.billingCycle === 'annual' ? '£51/year (Save 15%)' : '£5/month') :
+                   subscriptionDetails?.type === 'individual' ? '£5/month (Legacy)' :
+                   subscriptionDetails?.type === 'family' ? '£5/month (Legacy)' : 'Free'}
                 </div>
-                
+
                 {subscriptionDetails?.expiresAt && (
                   <>
                     <div>Next Billing:</div>
@@ -1390,20 +1765,27 @@ export default function ProfilePage() {
                 )}
               </div>
             </div>
-            
+
             {/* New plan info */}
             <div className="bg-primary/10 p-3 rounded-md">
               <h4 className="font-medium text-sm mb-2">New Plan:</h4>
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <div>Type:</div>
-                <div className="font-medium capitalize">{planType} Plan</div>
-                
+                <div className="font-medium capitalize">
+                  {planType === 'limited' ? 'Daswos Limited' :
+                   planType === 'unlimited' ? 'Daswos Unlimited' :
+                   planType === 'individual' ? 'Individual (Legacy)' :
+                   planType === 'family' ? 'Family (Legacy)' : planType} Plan
+                </div>
+
                 <div>Price:</div>
                 <div className="font-medium">
-                  {planType === "individual" ? "£3" : "£7"}/month
-                  {billingCycle === "annual" && " (billed annually with 15% discount)"}
+                  {planType === 'limited' ? 'Free' :
+                   planType === 'unlimited' ?
+                     (billingCycle === "annual" ? '£51/year (Save 15%)' : '£5/month') :
+                   'Free'}
                 </div>
-                
+
                 {subscriptionDetails?.expiresAt && (
                   <>
                     <div>Effective From:</div>
@@ -1414,38 +1796,68 @@ export default function ProfilePage() {
                 )}
               </div>
             </div>
-            
+
             <Alert className="mt-4">
               <AlertTitle>Billing Information</AlertTitle>
               <AlertDescription>
-                Your new plan rate of {planType === "individual" ? "£3" : "£7"} per month 
-                will take effect on your next billing date: {subscriptionDetails?.expiresAt 
-                  ? formatDate(new Date(subscriptionDetails.expiresAt), 'MMMM d, yyyy')
-                  : "your next billing date"}.
-                  
-                {planType === "family" && subscriptionDetails?.type === "individual" && (
+                {planType === 'limited' ? (
+                  <>
+                    Your new free plan will take effect on your next billing date: {subscriptionDetails?.expiresAt
+                      ? formatDate(new Date(subscriptionDetails.expiresAt), 'MMMM d, yyyy')
+                      : "your next billing date"}.
+                    You will not be charged again after that date.
+                  </>
+                ) : (
+                  <>
+                    Your new plan rate of {
+                      planType === 'unlimited' ?
+                        (billingCycle === "annual" ? '£51 per year' : '£5 per month') :
+                      '£0'
+                    } will take effect on your next billing date: {subscriptionDetails?.expiresAt
+                      ? formatDate(new Date(subscriptionDetails.expiresAt), 'MMMM d, yyyy')
+                      : "your next billing date"}.
+                    {planType !== 'limited' && " You will not be charged again until that date."}
+                  </>
+                )}
+
+                {/* Plan change descriptions */}
+                {subscriptionDetails?.type === 'limited' && planType === 'unlimited' && (
                   <span className="block mt-2">
-                    You'll be upgraded from Individual (£3/month) to Family (£7/month).
+                    You'll be upgraded from Daswos Limited (Free) to Daswos Unlimited
+                    ({billingCycle === "annual" ? "£51/year" : "£5/month"}).
                   </span>
                 )}
-                
-                {planType === "individual" && subscriptionDetails?.type === "family" && (
+                {subscriptionDetails?.type === 'unlimited' && planType === 'limited' && (
                   <span className="block mt-2">
-                    You'll be downgraded from Family (£7/month) to Individual (£3/month).
+                    You'll be downgraded from Daswos Unlimited
+                    ({subscriptionDetails?.billingCycle === 'annual' ? "£51/year" : "£5/month"})
+                    to Daswos Limited (Free).
                   </span>
                 )}
+                {(subscriptionDetails?.type === 'individual' || subscriptionDetails?.type === 'family') && planType === 'unlimited' && (
+                  <span className="block mt-2">
+                    You'll be migrated from your legacy plan to Daswos Unlimited
+                    ({billingCycle === "annual" ? "£51/year" : "£5/month"}).
+                  </span>
+                )}
+                {(subscriptionDetails?.type === 'individual' || subscriptionDetails?.type === 'family') && planType === 'limited' && (
+                  <span className="block mt-2">
+                    You'll be downgraded from your legacy plan to Daswos Limited (Free).
+                  </span>
+                )}
+
               </AlertDescription>
             </Alert>
           </div>
-          
+
           <div className="flex justify-end gap-3 mt-4">
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={() => setShowConfirmUpdate(false)}
             >
               Cancel
             </Button>
-            <Button 
+            <Button
               variant="default"
               disabled={subscriptionMutation.isPending}
               onClick={confirmUpdateSubscription}

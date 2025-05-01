@@ -2,10 +2,20 @@ import React, { createContext, useState, useContext, useEffect, ReactNode } from
 
 interface AdminSettings {
   paidFeaturesDisabled: boolean;
+  // Development mode toggles
   safesphereDevMode: boolean;
   aiShopperDevMode: boolean;
+  subscriptionDevMode: boolean;
+  superSafeDevMode: boolean;
+  // Feature visibility toggles
+  safesphereEnabled: boolean;
+  aiShopperEnabled: boolean;
+  superSafeEnabled: boolean;
+  // Development messages
   safesphereDevMessage: string;
   aiShopperDevMessage: string;
+  subscriptionDevMessage: string;
+  superSafeDevMessage: string;
 }
 
 interface AdminSettingsContextType {
@@ -16,10 +26,20 @@ interface AdminSettingsContextType {
 
 const defaultSettings: AdminSettings = {
   paidFeaturesDisabled: false,
+  // Development mode toggles
   safesphereDevMode: false,
   aiShopperDevMode: false,
+  subscriptionDevMode: false,
+  superSafeDevMode: false,
+  // Feature visibility toggles
+  safesphereEnabled: true,
+  aiShopperEnabled: true,
+  superSafeEnabled: true,
+  // Development messages
   safesphereDevMessage: '',
-  aiShopperDevMessage: ''
+  aiShopperDevMessage: '',
+  subscriptionDevMessage: '',
+  superSafeDevMessage: ''
 };
 
 const AdminSettingsContext = createContext<AdminSettingsContextType>({
@@ -42,10 +62,20 @@ export const AdminSettingsProvider = ({ children }: { children: ReactNode }) => 
         console.log('Admin settings received in context:', data);
         setSettings({
           paidFeaturesDisabled: data.paidFeaturesDisabled === true,
-          safesphereDevMode: data.safesphereDevMode === true, 
+          // Development mode toggles
+          safesphereDevMode: data.safesphereDevMode === true,
           aiShopperDevMode: data.aiShopperDevMode === true,
+          subscriptionDevMode: data.subscriptionDevMode === true,
+          superSafeDevMode: data.superSafeDevMode === true,
+          // Feature visibility toggles
+          safesphereEnabled: data.safesphereEnabled !== false, // Default to true if not set
+          aiShopperEnabled: data.aiShopperEnabled !== false, // Default to true if not set
+          superSafeEnabled: data.superSafeEnabled !== false, // Default to true if not set
+          // Development messages
           safesphereDevMessage: data.safesphereDevMessage || '',
-          aiShopperDevMessage: data.aiShopperDevMessage || ''
+          aiShopperDevMessage: data.aiShopperDevMessage || '',
+          subscriptionDevMessage: data.subscriptionDevMessage || '',
+          superSafeDevMessage: data.superSafeDevMessage || ''
         });
       }
     } catch (error) {

@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useAuth } from '@/hooks/use-auth';
 import { useAdminSettings } from '@/hooks/use-admin-settings';
+import { useSuperSafe } from '@/contexts/super-safe-context';
 
 const BulkBuy: React.FC = () => {
   const [, setLocation] = useLocation();
@@ -25,14 +26,30 @@ const BulkBuy: React.FC = () => {
   const [aiResponse, setAiResponse] = useState<any>(null);
   const { user } = useAuth();
   const { settings } = useAdminSettings();
+  const { isSuperSafeEnabled, settings: superSafeSettings } = useSuperSafe();
 
   // Show notification when trying to use SafeSphere without being logged in
   const [showLoginAlert, setShowLoginAlert] = useState(false);
 
+  // Show notification when OpenSphere is blocked by SuperSafe Mode
+  const [showSuperSafeAlert, setShowSuperSafeAlert] = useState(false);
+
   // For filtering within BulkBuy
   const [sphereFilter, setSphereFilter] = useState<'safesphere' | 'opensphere'>(
-    user || settings.paidFeaturesDisabled ? 'safesphere' : 'opensphere'
+    // Force SafeSphere if SuperSafe Mode is enabled and OpenSphere is blocked
+    (user && isSuperSafeEnabled && superSafeSettings.blockOpenSphere) ? 'safesphere' :
+    // Otherwise use default logic
+    (user || settings.paidFeaturesDisabled ? 'safesphere' : 'opensphere')
   );
+
+  // Check SuperSafe Mode settings when component mounts or settings change
+  useEffect(() => {
+    // If SuperSafe Mode is enabled and OpenSphere is blocked, force SafeSphere
+    if (user && isSuperSafeEnabled && superSafeSettings.blockOpenSphere && sphereFilter === 'opensphere') {
+      setSphereFilter('safesphere');
+      setShowSuperSafeAlert(true);
+    }
+  }, [user, isSuperSafeEnabled, superSafeSettings, sphereFilter]);
 
   // Listen for AI mode changes
   useEffect(() => {
@@ -58,6 +75,16 @@ const BulkBuy: React.FC = () => {
 
   // Handle sphere change - keep on bulk buy page but filter items
   const handleSphereChange = (sphere: 'safesphere' | 'opensphere') => {
+    // If SuperSafe Mode is enabled and OpenSphere is blocked, prevent switching to OpenSphere
+    if (user && isSuperSafeEnabled && superSafeSettings.blockOpenSphere && sphere === 'opensphere') {
+      console.log('SuperSafe Mode: Blocked switch to OpenSphere');
+      setShowSuperSafeAlert(true);
+      setShowLoginAlert(false);
+      return;
+    } else {
+      setShowSuperSafeAlert(false);
+    }
+
     // When paid features are disabled, allow SafeSphere access without login
     if (settings.paidFeaturesDisabled) {
       setSphereFilter(sphere);
@@ -81,7 +108,7 @@ const BulkBuy: React.FC = () => {
 
   // Query for bulk buy products with search filter using dedicated endpoint
   const { data: products = [], isLoading, error, refetch } = useQuery<Product[]>({
-    queryKey: ['/api/bulk-buy', searchQuery, sphereFilter],
+    queryKey: ['/api/bulk-buy', searchQuery, sphereFilter, isSuperSafeEnabled, superSafeSettings],
     queryFn: async () => {
       let url = `/api/bulk-buy`;
       const params = new URLSearchParams();
@@ -92,6 +119,23 @@ const BulkBuy: React.FC = () => {
 
       // Add sphere to filter by safesphere/opensphere
       params.append('sphere', sphereFilter);
+
+      // Add SuperSafe Mode parameters if enabled
+      if (user && isSuperSafeEnabled) {
+        params.append('superSafeEnabled', 'true');
+
+        if (superSafeSettings.blockGambling) {
+          params.append('blockGambling', 'true');
+        }
+
+        if (superSafeSettings.blockAdultContent) {
+          params.append('blockAdultContent', 'true');
+        }
+
+        if (superSafeSettings.blockOpenSphere) {
+          params.append('blockOpenSphere', 'true');
+        }
+      }
 
       if (params.toString()) {
         url += `?${params.toString()}`;
@@ -138,8 +182,30 @@ const BulkBuy: React.FC = () => {
     setSearchQuery(query);
 
     try {
+      // Build URL with parameters
+      const params = new URLSearchParams();
+      params.append('query', query);
+      params.append('type', 'shopping');
+
+      // Add SuperSafe Mode parameters if enabled
+      if (user && isSuperSafeEnabled) {
+        params.append('superSafeEnabled', 'true');
+
+        if (superSafeSettings.blockGambling) {
+          params.append('blockGambling', 'true');
+        }
+
+        if (superSafeSettings.blockAdultContent) {
+          params.append('blockAdultContent', 'true');
+        }
+
+        if (superSafeSettings.blockOpenSphere) {
+          params.append('blockOpenSphere', 'true');
+        }
+      }
+
       // Call the AI search API with type=shopping to focus on products
-      const response = await fetch(`/api/ai-search?query=${encodeURIComponent(query)}&type=shopping`);
+      const response = await fetch(`/api/ai-search?${params.toString()}`);
       if (!response.ok) {
         throw new Error('Failed to fetch AI response');
       }
@@ -213,6 +279,25 @@ const BulkBuy: React.FC = () => {
                   className="mt-1 bg-warning-100 border-warning-200 hover:bg-warning-200"
                 >
                   Login / Register
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* SuperSafe Mode alert for blocked OpenSphere */}
+          {showSuperSafeAlert && (
+            <Alert className="mb-4 bg-blue-50 text-blue-800 border-blue-100">
+              <AlertCircle className="h-4 w-4 text-blue-600" />
+              <AlertTitle className="text-blue-800">SuperSafe Mode Active</AlertTitle>
+              <AlertDescription className="text-blue-700">
+                <p className="mb-2">OpenSphere is blocked by your SuperSafe Mode settings. You can change this in your SuperSafe settings.</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setLocation('/super-safe-settings')}
+                  className="mt-1 bg-blue-100 border-blue-200 hover:bg-blue-200"
+                >
+                  SuperSafe Settings
                 </Button>
               </AlertDescription>
             </Alert>

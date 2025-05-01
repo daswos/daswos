@@ -17,14 +17,15 @@ import { useAdminSettings } from '@/hooks/use-admin-settings';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from '@/hooks/use-toast';
 import { StripeWrapper } from '@/components/stripe-payment-form';
-import { 
+import { SimpleStripeForm } from '@/components/simple-stripe-form';
+import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger 
+  DialogTrigger
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 
@@ -52,7 +53,7 @@ const SafeSphereSubscription: React.FC = () => {
   const [location, setLocation] = useLocation();
   const { subscriptionMutation, user, hasSubscription, registerMutation, loginMutation, subscriptionDetails } = useAuth();
   const { settings } = useAdminSettings();
-  const [selectedPlan, setSelectedPlan] = useState<string>('individual');
+  const [selectedPlan, setSelectedPlan] = useState<"limited" | "unlimited">('limited');
   const [billingCycle, setBillingCycle] = useState<string>('monthly');
   const [paymentSuccess, setPaymentSuccess] = useState<boolean>(false);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
@@ -62,18 +63,18 @@ const SafeSphereSubscription: React.FC = () => {
   // We no longer need login/register tabs as we're simplifying to registration only
   // const [activeTab, setActiveTab] = useState<"login" | "register">("login");
   const { toast } = useToast();
-  
+
   // Log admin settings for debugging
   useEffect(() => {
     console.log('Admin settings in SafeSphere subscription page:', settings);
   }, [settings]);
-  
+
   // Get return URL from query parameters if exists
   const getReturnTo = () => {
     const urlParams = new URLSearchParams(window.location.search);
     return urlParams.get('returnTo') || '/';
   };
-  
+
   const returnTo = getReturnTo();
 
   // Initialize payment form
@@ -135,17 +136,18 @@ const SafeSphereSubscription: React.FC = () => {
     const urlSelectedPlan = urlParams.get('selectedPlan');
     const urlBillingCycle = urlParams.get('billingCycle');
     const showPayment = urlParams.get('showPayment');
-    
-    if (urlSelectedPlan) {
+
+    if (urlSelectedPlan === 'limited' || urlSelectedPlan === 'unlimited') {
       setSelectedPlan(urlSelectedPlan);
     }
-    
-    if (urlBillingCycle) {
+
+    if (urlBillingCycle === 'monthly' || urlBillingCycle === 'annual') {
       setBillingCycle(urlBillingCycle);
     }
-    
+
+    // If showPayment is true and user is logged in, show the payment form immediately
     if (showPayment === 'true' && user) {
-      // Auto-show payment form if coming from registration with plan
+      console.log('Auto-showing payment form for', urlSelectedPlan, 'plan with', urlBillingCycle, 'billing');
       setShowPaymentForm(true);
     }
   }, [user]);
@@ -153,17 +155,35 @@ const SafeSphereSubscription: React.FC = () => {
   // Handle select plan button click
   const handleSelectPlan = () => {
     if (user) {
-      // If user is logged in, show payment form
-      setShowPaymentForm(true);
+      // For free tier, activate immediately without payment
+      if (selectedPlan === 'limited') {
+        subscriptionMutation.mutate({
+          type: "limited",
+          billingCycle: "monthly",
+          action: "subscribe"
+        }, {
+          onSuccess: () => {
+            setPaymentSuccess(true);
+            toast({
+              title: "Subscription Activated",
+              description: "Your Daswos Limited plan has been activated.",
+              variant: "default",
+            });
+          }
+        });
+      } else {
+        // For paid plans, show payment form
+        setShowPaymentForm(true);
+      }
     } else {
       // If user is not logged in, show the registration form right here
       setShowSignupForm(true);
     }
   };
-  
+
   // Show a confirmation dialog when switching plans if user already has a subscription
   const [showPlanChangeConfirmation, setShowPlanChangeConfirmation] = useState<boolean>(false);
-  
+
   // Handle switching subscription plan
   const handleSwitchPlan = () => {
     // If user is switching plans with an existing subscription,
@@ -172,7 +192,7 @@ const SafeSphereSubscription: React.FC = () => {
       setShowPlanChangeConfirmation(true);
       return;
     }
-    
+
     // Otherwise proceed with the standard payment process
     completeSubscriptionSwitch();
   };
@@ -207,7 +227,7 @@ const SafeSphereSubscription: React.FC = () => {
   // Function to actually complete the subscription switch after confirmation
   const completeSubscriptionSwitch = () => {
     subscriptionMutation.mutate({
-      type: selectedPlan as "individual" | "family",
+      type: selectedPlan,
       billingCycle: billingCycle as "monthly" | "annual",
       action: "switch"
     }, {
@@ -216,7 +236,11 @@ const SafeSphereSubscription: React.FC = () => {
         setShowPlanChangeConfirmation(false);
         toast({
           title: "Subscription Updated",
-          description: `Your plan has been updated to ${selectedPlan} with ${billingCycle} billing. The change will take effect on your next billing date.`,
+          description: `Your plan has been updated to ${
+            selectedPlan === 'limited' ? 'Daswos Limited' :
+            selectedPlan === 'unlimited' ? 'Daswos Unlimited' :
+            selectedPlan === 'individual' ? 'Individual (Legacy)' : 'Family (Legacy)'
+          } with ${billingCycle} billing. The change will take effect on your next billing date.`,
           variant: "default",
         });
       },
@@ -230,16 +254,16 @@ const SafeSphereSubscription: React.FC = () => {
       }
     });
   };
-  
+
   // Handle payment form submission
   const onPaymentSubmit = (data: PaymentFormValues) => {
     // Process payment and activate subscription
     setIsProcessing(true);
-    
+
     // Simulate payment processing
     setTimeout(() => {
       subscriptionMutation.mutate({
-        type: selectedPlan as "individual" | "family",
+        type: selectedPlan,
         billingCycle: billingCycle as "monthly" | "annual",
         action: "subscribe"
       }, {
@@ -247,16 +271,20 @@ const SafeSphereSubscription: React.FC = () => {
           setIsProcessing(false);
           setPaymentSuccess(true);
           toast({
-            title: "Payment Successful",
-            description: `Your ${selectedPlan} plan has been activated.`,
+            title: "Subscription Activated",
+            description: `Your ${
+              selectedPlan === 'limited' ? 'Daswos Limited' :
+              selectedPlan === 'unlimited' ? 'Daswos Unlimited' :
+              selectedPlan === 'individual' ? 'Individual (Legacy)' : 'Family (Legacy)'
+            } plan has been activated.`,
             variant: "default",
           });
         },
         onError: (error) => {
           setIsProcessing(false);
           toast({
-            title: "Payment Failed",
-            description: "There was an error processing your payment. Please try again.",
+            title: "Subscription Failed",
+            description: "There was an error processing your subscription. Please try again.",
             variant: "destructive",
           });
         }
@@ -276,7 +304,7 @@ const SafeSphereSubscription: React.FC = () => {
       setLocation('/');
     }
   };
-  
+
   // Close the payment form and return to plans
   const handleBackToPlans = () => {
     setShowPaymentForm(false);
@@ -285,17 +313,28 @@ const SafeSphereSubscription: React.FC = () => {
 
   // Calculate pricing based on selection
   const getPriceDisplay = () => {
-    if (selectedPlan === 'individual') {
-      return billingCycle === 'monthly' ? '3' : '30';
+    if (selectedPlan === 'limited') {
+      return '0'; // Free tier
+    } else if (selectedPlan === 'unlimited') {
+      return billingCycle === 'monthly' ? '5' : '50';
     } else {
-      return billingCycle === 'monthly' ? '7' : '70';
+      // Legacy plans - map to new pricing
+      return billingCycle === 'monthly' ? '5' : '50';
     }
   };
 
   // Calculate savings
   const getSavings = () => {
     if (billingCycle === 'annual') {
-      return selectedPlan === 'individual' ? '6' : '14';
+      if (selectedPlan === 'limited') {
+        return '0'; // Free tier has no savings
+      } else if (selectedPlan === 'unlimited') {
+        return '19.98'; // $9.99 * 12 - $99.90 = $19.98 savings
+      } else if (selectedPlan === 'individual') {
+        return '6'; // Legacy savings
+      } else {
+        return '14'; // Legacy family savings
+      }
     }
     return '0';
   };
@@ -312,17 +351,17 @@ const SafeSphereSubscription: React.FC = () => {
   const handleRegisterSubmit = async (data: z.infer<typeof registerSchema>) => {
     try {
       const { confirmPassword, ...registerData } = data;
-      
+
       // First validate the credentials
       const response = await fetch('/api/validate-registration', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(registerData),
       });
-      
+
       if (!response.ok) {
         const errorData = await response.json();
-        
+
         // Handle specific validation errors
         if (errorData.error.includes('Email already in use')) {
           toast({
@@ -345,7 +384,7 @@ const SafeSphereSubscription: React.FC = () => {
         }
         return;
       }
-      
+
       // Validation passed, save data and show payment form
       setRegistrationData(registerData);
       setShowSignupForm(false); // Hide the signup form
@@ -363,7 +402,7 @@ const SafeSphereSubscription: React.FC = () => {
       });
     }
   };
-  
+
   // Add handler for login
   const handleLoginSubmit = (data: z.infer<typeof loginSchema>) => {
     loginMutation.mutate(data, {
@@ -412,41 +451,52 @@ const SafeSphereSubscription: React.FC = () => {
     });
   };
 
-  // Redirect if paid features are disabled
+  // Redirect if paid features are disabled or subscription dev mode is enabled
   useEffect(() => {
-    if (settings.paidFeaturesDisabled) {
+    if (settings.paidFeaturesDisabled || settings.subscriptionDevMode) {
+      const message = settings.paidFeaturesDisabled
+        ? "The administrator has currently disabled all premium features. All users can access SafeSphere features for free."
+        : "Subscriptions are currently in development mode. All premium features are available to all users without requiring a subscription.";
+
+      const title = settings.paidFeaturesDisabled
+        ? "Premium Features Disabled"
+        : "Subscription Development Mode";
+
       toast({
-        title: "Premium Features Disabled",
-        description: "The administrator has currently disabled all premium features. All users can access SafeSphere features for free.",
+        title: title,
+        description: message,
         variant: "default",
       });
-      
+
       // Redirect after a short delay to allow the toast to be seen
       const timer = setTimeout(() => {
         setLocation('/');
       }, 3500);
-      
+
       return () => clearTimeout(timer);
     }
-  }, [settings.paidFeaturesDisabled, setLocation, toast]);
+  }, [settings.paidFeaturesDisabled, settings.subscriptionDevMode, setLocation, toast]);
 
   return (
     <div className="container mx-auto px-4 py-12">
       <h1 className="text-3xl font-bold text-center mb-2">
-        <span className="text-primary-500">SafeSphere</span> Subscription
+        <span className="text-primary-500">Daswos</span> Subscription
       </h1>
       <p className="text-center text-gray-600 mb-8 max-w-2xl mx-auto">
-        Unlock premium SafeSphere features to enhance your security and protect your transactions.
+        Unlock premium Daswos features to enhance your security and protect your transactions.
       </p>
-      
-      {settings.paidFeaturesDisabled && (
+
+      {(settings.paidFeaturesDisabled || settings.subscriptionDevMode) && (
         <Alert className="max-w-2xl mx-auto mb-8" variant="default">
           <AlertTitle className="flex items-center">
             <InfoIcon className="h-4 w-4 mr-2" />
-            Premium Features Currently Disabled
+            {settings.paidFeaturesDisabled ? "Premium Features Currently Disabled" : "Subscription Development Mode"}
           </AlertTitle>
           <AlertDescription>
-            The administrator has disabled all premium features. All users can access SafeSphere features for free.
+            {settings.paidFeaturesDisabled
+              ? "The administrator has disabled all premium features. All users can access SafeSphere features for free."
+              : "Subscriptions are currently in development mode. All premium features are available to all users without requiring a subscription."
+            }
             You will be redirected to the home page shortly.
           </AlertDescription>
         </Alert>
@@ -497,13 +547,13 @@ const SafeSphereSubscription: React.FC = () => {
                   </p>
                 </div>
               </div>
-              
+
               <div className="py-2 mb-4">
                 <p className="text-sm text-gray-600">
                   Please create a new account to continue with your subscription. If you already have an account, please go back to the plans page and log in first.
                 </p>
               </div>
-              
+
               <Form {...registerForm}>
                 <form onSubmit={registerForm.handleSubmit(handleRegisterSubmit)} className="space-y-4">
                       <FormField
@@ -596,7 +646,7 @@ const SafeSphereSubscription: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle>Payment Details</CardTitle>
-                  <CardDescription>Complete your {selectedPlan} plan subscription</CardDescription>
+                  <CardDescription>Complete your Daswos {selectedPlan === 'unlimited' ? 'Unlimited' : 'Limited'} plan subscription</CardDescription>
                 </div>
                 <Button variant="outline" size="sm" onClick={handleBackToPlans}>
                   Back to Plans
@@ -604,18 +654,26 @@ const SafeSphereSubscription: React.FC = () => {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="bg-blue-50 p-3 rounded-md mb-4 flex items-start">
-                <ShieldCheck className="h-5 w-5 text-blue-600 mr-2 mt-0.5" />
-                <div>
-                  <p className="text-sm font-medium text-blue-800">Subscribing to SafeSphere {selectedPlan} Plan</p>
-                  <p className="text-xs text-blue-700">
-                    {billingCycle === 'monthly' ? 'Monthly' : 'Annual'} billing at {getPriceDisplay()} {billingCycle === 'monthly' ? 'per month' : 'per year'}
-                  </p>
-                </div>
-              </div>
-              
-              <StripeWrapper 
-                selectedPlan={selectedPlan as 'individual' | 'family'} 
+              {/* Removed redundant subscription message - the StripeWrapper component already shows this information */}
+
+              {/* Use SimpleStripeForm for more reliable testing */}
+              <SimpleStripeForm
+                selectedPlan={selectedPlan as 'limited' | 'unlimited' | 'individual' | 'family'}
+                billingCycle={billingCycle as 'monthly' | 'annual'}
+                onSuccess={() => {
+                  setPaymentSuccess(true);
+                  toast({
+                    title: "Payment Successful",
+                    description: `Your ${selectedPlan} plan has been activated.`,
+                    variant: "default",
+                  });
+                }}
+                onCancel={handleBackToPlans}
+              />
+
+              {/* Original Stripe form - commented out for now
+              <StripeWrapper
+                selectedPlan={selectedPlan as 'limited' | 'unlimited' | 'individual' | 'family'}
                 billingCycle={billingCycle as 'monthly' | 'annual'}
                 registrationData={registrationData || undefined}
                 onSuccess={() => {
@@ -628,6 +686,7 @@ const SafeSphereSubscription: React.FC = () => {
                 }}
                 onCancel={handleBackToPlans}
               />
+              */}
             </CardContent>
           </Card>
         </div>
@@ -645,7 +704,7 @@ const SafeSphereSubscription: React.FC = () => {
                     </Badge>
                   </div>
                   <CardDescription>
-                    Manage your SafeSphere subscription
+                    Manage your Daswos subscription
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -659,13 +718,13 @@ const SafeSphereSubscription: React.FC = () => {
                       </div>
                       <p className="text-sm text-blue-700 mb-1">
                         Your subscription is active until:{' '}
-                        {subscriptionDetails?.expiresAt 
-                          ? new Date(subscriptionDetails.expiresAt).toLocaleDateString() 
+                        {subscriptionDetails?.expiresAt
+                          ? new Date(subscriptionDetails.expiresAt).toLocaleDateString()
                           : 'Unknown'}
                       </p>
                       <p className="text-sm text-blue-700">
-                        {subscriptionDetails?.type === 'individual' 
-                          ? 'Includes access for a single user account' 
+                        {subscriptionDetails?.type === 'individual'
+                          ? 'Includes access for a single user account'
                           : 'Includes access for up to 5 family members'}
                       </p>
                     </div>
@@ -673,8 +732,8 @@ const SafeSphereSubscription: React.FC = () => {
                 </CardContent>
                 <CardFooter className="flex-col space-y-2">
                   <div className="w-full flex space-x-2">
-                    <Button 
-                      variant="default" 
+                    <Button
+                      variant="default"
                       className="flex-1"
                       onClick={() => setShowPaymentForm(true)}
                     >
@@ -690,8 +749,8 @@ const SafeSphereSubscription: React.FC = () => {
                         <DialogHeader>
                           <DialogTitle>Confirm Unsubscription</DialogTitle>
                           <DialogDescription>
-                            Are you sure you want to cancel your SafeSphere subscription? 
-                            You will lose access to SafeSphere features immediately.
+                            Are you sure you want to cancel your Daswos subscription?
+                            You will lose access to premium features immediately.
                           </DialogDescription>
                         </DialogHeader>
                         <div className="p-4 bg-amber-50 border border-amber-100 rounded-md text-amber-700 text-sm mb-4">
@@ -699,7 +758,7 @@ const SafeSphereSubscription: React.FC = () => {
                             <AlertTriangle className="h-5 w-5 mr-2 mt-0.5 text-amber-500" />
                             <div>
                               <p className="font-medium mb-1">Your account will remain active</p>
-                              <p>You're only canceling your SafeSphere subscription. Your account will still exist, and you can resubscribe at any time.</p>
+                              <p>You're only canceling your Daswos subscription. Your account will still exist, and you can resubscribe at any time.</p>
                             </div>
                           </div>
                         </div>
@@ -707,9 +766,9 @@ const SafeSphereSubscription: React.FC = () => {
                           <Button variant="outline" onClick={() => setShowUnsubscribeDialog(false)}>
                             Keep Subscription
                           </Button>
-                          <Button 
-                            variant="destructive" 
-                            onClick={handleUnsubscribe} 
+                          <Button
+                            variant="destructive"
+                            onClick={handleUnsubscribe}
                             disabled={subscriptionMutation.isPending}
                           >
                             {subscriptionMutation.isPending ? "Canceling..." : "Cancel Subscription"}
@@ -722,13 +781,13 @@ const SafeSphereSubscription: React.FC = () => {
               </Card>
             </div>
           ) : null}
-          
+
           {/* Billing Cycle Selection */}
           <div className="max-w-md mx-auto mb-8">
             <div className="bg-gray-100 p-4 rounded-lg flex justify-center mb-8">
-              <RadioGroup 
-                defaultValue="monthly" 
-                className="flex" 
+              <RadioGroup
+                defaultValue="monthly"
+                className="flex"
                 orientation="horizontal"
                 onValueChange={setBillingCycle}
               >
@@ -744,116 +803,113 @@ const SafeSphereSubscription: React.FC = () => {
             </div>
           </div>
 
-          <RadioGroup 
-            value={selectedPlan} 
-            onValueChange={setSelectedPlan} 
+          <RadioGroup
+            value={selectedPlan}
+            onValueChange={setSelectedPlan}
             className="space-y-8"
           >
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto mb-8">
-              {/* Individual Plan */}
+              {/* Limited Plan (Free) */}
               <div className="flex flex-col">
-                <Card className={`border-2 ${selectedPlan === 'individual' ? 'border-primary-500' : 'border-gray-200'} h-full`}>
+                <Card className={`border-2 ${selectedPlan === 'limited' ? 'border-primary-500' : 'border-gray-200'} h-full`}>
                   <CardHeader>
                     <div className="flex justify-between items-start">
                       <div>
-                        <CardTitle>Individual</CardTitle>
-                        <CardDescription>Perfect for personal use</CardDescription>
+                        <CardTitle>Daswos Limited</CardTitle>
+                        <CardDescription>Basic protection for individuals</CardDescription>
                       </div>
                       <Shield className="h-8 w-8 text-primary-500" />
                     </div>
                     <div className="mt-4">
-                      <span className="text-3xl font-bold">£{billingCycle === 'monthly' ? '3' : '30'}</span>
-                      <span className="text-gray-500">/{billingCycle === 'monthly' ? 'month' : 'year'}</span>
+                      <span className="text-3xl font-bold">Free</span>
+                      <Badge className="ml-2 bg-blue-100 text-blue-800 hover:bg-blue-100">Individual Only</Badge>
                     </div>
                   </CardHeader>
                   <CardContent className="flex-grow">
                     <ul className="space-y-2">
                       <li className="flex items-center">
                         <CheckCircle className="h-5 w-5 text-green-500 mr-2" />
-                        <span>Access to verified SafeSphere sellers</span>
+                        <span>SafeSphere protection</span>
                       </li>
                       <li className="flex items-center">
                         <CheckCircle className="h-5 w-5 text-green-500 mr-2" />
-                        <span>Advanced trust score filtering</span>
+                        <span>SuperSafe mode</span>
                       </li>
                       <li className="flex items-center">
                         <CheckCircle className="h-5 w-5 text-green-500 mr-2" />
-                        <span>Priority customer support</span>
-                      </li>
-                      <li className="flex items-center">
-                        <CheckCircle className="h-5 w-5 text-green-500 mr-2" />
-                        <span>Transaction dispute protection</span>
+                        <span>All features except Daswos AI</span>
                       </li>
                     </ul>
                   </CardContent>
                   <CardFooter>
                     <div className="flex items-center space-x-2 w-full">
-                      <RadioGroupItem 
-                        value="individual" 
-                        id="individual" 
-                        disabled={hasSubscription && subscriptionDetails?.type === 'individual'} 
+                      <RadioGroupItem
+                        value="limited"
+                        id="limited"
+                        disabled={hasSubscription && subscriptionDetails?.type === 'limited'}
                       />
-                      <Label htmlFor="individual" className="flex-grow font-medium">
-                        {hasSubscription && subscriptionDetails?.type === 'individual' 
-                          ? "Current Plan" 
-                          : "Select Individual Plan"}
+                      <Label htmlFor="limited" className="flex-grow font-medium">
+                        {hasSubscription && subscriptionDetails?.type === 'limited'
+                          ? "Current Plan"
+                          : "Select Limited Plan"}
                       </Label>
                     </div>
                   </CardFooter>
                 </Card>
               </div>
 
-              {/* Family Plan */}
+              {/* Unlimited Plan (Paid) */}
               <div className="flex flex-col">
-                <Card className={`border-2 ${selectedPlan === 'family' ? 'border-primary-500' : 'border-gray-200'} h-full`}>
+                <Card className={`border-2 ${selectedPlan === 'unlimited' ? 'border-primary-500' : 'border-gray-200'} h-full`}>
                   <CardHeader>
                     <div className="flex justify-between items-start">
                       <div>
-                        <CardTitle>Family</CardTitle>
-                        <CardDescription>Share with up to 5 family members</CardDescription>
+                        <CardTitle>Daswos Unlimited</CardTitle>
+                        <CardDescription>Complete protection with AI features</CardDescription>
                       </div>
                       <Users className="h-8 w-8 text-primary-500" />
                     </div>
                     <div className="mt-4">
-                      <span className="text-3xl font-bold">£{billingCycle === 'monthly' ? '7' : '70'}</span>
+                      <span className="text-3xl font-bold">£{billingCycle === 'monthly' ? '5' : '50'}</span>
                       <span className="text-gray-500">/{billingCycle === 'monthly' ? 'month' : 'year'}</span>
+                      <Badge className="ml-2 bg-green-100 text-green-800 hover:bg-green-100">Up to 5 Accounts</Badge>
                     </div>
                   </CardHeader>
                   <CardContent className="flex-grow">
                     <ul className="space-y-2">
                       <li className="flex items-center">
                         <CheckCircle className="h-5 w-5 text-green-500 mr-2" />
-                        <span>All Individual plan benefits</span>
+                        <span>All Limited plan features</span>
                       </li>
                       <li className="flex items-center">
                         <CheckCircle className="h-5 w-5 text-green-500 mr-2" />
-                        <span>Share with up to 5 family members</span>
+                        <span>Daswos AI search</span>
                       </li>
                       <li className="flex items-center">
                         <CheckCircle className="h-5 w-5 text-green-500 mr-2" />
-                        <span>Family purchase history dashboard</span>
+                        <span>AutoShop integration</span>
                       </li>
                       <li className="flex items-center">
                         <CheckCircle className="h-5 w-5 text-green-500 mr-2" />
-                        <span>Enhanced transaction protection</span>
+                        <span>Family account support (up to 5 accounts)</span>
                       </li>
                       <li className="flex items-center">
                         <CheckCircle className="h-5 w-5 text-green-500 mr-2" />
-                        <span>Premium customer support</span>
+                        <span>Control of umbrella accounts' SafeSphere and SuperSafe settings</span>
                       </li>
                     </ul>
                   </CardContent>
                   <CardFooter>
                     <div className="flex items-center space-x-2 w-full">
-                      <RadioGroupItem 
-                        value="family" 
-                        id="family" 
-                        disabled={hasSubscription && subscriptionDetails?.type === 'family'} 
+                      <RadioGroupItem
+                        value="unlimited"
+                        id="unlimited"
+                        disabled={hasSubscription && subscriptionDetails?.type === 'unlimited'}
                       />
-                      <Label htmlFor="family" className="flex-grow font-medium">
-                        {hasSubscription && subscriptionDetails?.type === 'family' 
-                          ? "Current Plan" 
-                          : "Select Family Plan"}
+                      <Label htmlFor="unlimited" className="flex-grow font-medium">
+                        {hasSubscription && subscriptionDetails?.type === 'unlimited'
+                          ? "Current Plan"
+                          : "Select Unlimited Plan"}
                       </Label>
                     </div>
                   </CardFooter>
@@ -864,14 +920,14 @@ const SafeSphereSubscription: React.FC = () => {
 
           {/* Continue with Plan Button - More prominent and above Order Summary */}
           <div className="flex justify-center mb-6">
-            <Button 
-              onClick={user && hasSubscription ? handleSwitchPlan : handleSelectPlan} 
+            <Button
+              onClick={user && hasSubscription ? handleSwitchPlan : handleSelectPlan}
               className="px-8 py-6 text-lg font-semibold bg-primary-600 hover:bg-primary-700"
             >
-              {user && hasSubscription 
-                ? 'Switch to this Plan' 
-                : user 
-                  ? 'Continue to Payment' 
+              {user && hasSubscription
+                ? 'Switch to this Plan'
+                : user
+                  ? 'Continue to Payment'
                   : 'Continue with this Plan'
               }
               <ArrowRight className="ml-2 h-5 w-5" />
@@ -882,14 +938,16 @@ const SafeSphereSubscription: React.FC = () => {
             <Card>
               <CardHeader>
                 <CardTitle>Order Summary</CardTitle>
-                <CardDescription>SafeSphere Subscription</CardDescription>
+                <CardDescription>Daswos Subscription</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
                   <div className="flex justify-between">
                     <span>Selected Plan:</span>
                     <span className="font-semibold">
-                      {selectedPlan === 'individual' ? 'Individual' : 'Family'} Plan
+                      {selectedPlan === 'limited' ? 'Daswos Limited' :
+                       selectedPlan === 'unlimited' ? 'Daswos Unlimited' :
+                       selectedPlan === 'individual' ? 'Individual (Legacy)' : 'Family (Legacy)'} Plan
                     </span>
                   </div>
                   <div className="flex justify-between">
@@ -920,14 +978,14 @@ const SafeSphereSubscription: React.FC = () => {
                 </div>
               </CardContent>
               <CardFooter>
-                <Button 
-                  onClick={user && hasSubscription ? handleSwitchPlan : handleSelectPlan} 
+                <Button
+                  onClick={user && hasSubscription ? handleSwitchPlan : handleSelectPlan}
                   className="w-full"
                 >
-                  {user && hasSubscription 
-                    ? 'Switch to this Plan' 
-                    : user 
-                      ? 'Continue to Payment' 
+                  {user && hasSubscription
+                    ? 'Switch to this Plan'
+                    : user
+                      ? 'Continue to Payment'
                       : 'Continue with this Plan'
                   }
                 </Button>
@@ -938,7 +996,7 @@ const SafeSphereSubscription: React.FC = () => {
               <ShieldCheck className="h-4 w-4 text-blue-600" />
               <AlertTitle className="text-blue-800">Enhanced Protection</AlertTitle>
               <AlertDescription className="text-blue-700">
-                SafeSphere subscription gives you advanced protection features and access to exclusive verified sellers.
+                Daswos Unlimited subscription gives you advanced protection features, AI capabilities, and access to exclusive verified sellers.
               </AlertDescription>
             </Alert>
           </div>
@@ -948,25 +1006,31 @@ const SafeSphereSubscription: React.FC = () => {
       <Dialog open={showPlanChangeConfirmation} onOpenChange={setShowPlanChangeConfirmation}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Confirm Plan Change</DialogTitle>
+            <DialogTitle>Confirm Daswos Plan Change</DialogTitle>
             <DialogDescription>
-              You are changing your subscription plan.
+              You are changing your Daswos subscription plan.
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="space-y-4 py-4">
             {/* Current plan info */}
             <div className="bg-muted/30 p-3 rounded-md">
               <h4 className="font-medium text-sm mb-2">Current Plan:</h4>
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <div>Type:</div>
-                <div className="font-medium capitalize">{subscriptionDetails?.type || "Individual"} Plan</div>
-                
+                <div className="font-medium capitalize">
+                  {subscriptionDetails?.type === 'limited' ? 'Daswos Limited' :
+                   subscriptionDetails?.type === 'unlimited' ? 'Daswos Unlimited' :
+                   subscriptionDetails?.type === 'individual' ? 'Individual (Legacy)' : 'Family (Legacy)'} Plan
+                </div>
+
                 <div>Price:</div>
                 <div className="font-medium">
-                  £{subscriptionDetails?.type === "individual" ? "3" : "7"}/month
+                  {subscriptionDetails?.type === 'limited' ? 'Free' :
+                   subscriptionDetails?.type === 'unlimited' ? '£5/month' :
+                   '£5/month (Legacy Plan)'}
                 </div>
-                
+
                 {subscriptionDetails?.expiresAt && (
                   <>
                     <div>Next Billing:</div>
@@ -977,33 +1041,53 @@ const SafeSphereSubscription: React.FC = () => {
                 )}
               </div>
             </div>
-            
+
             {/* New plan info */}
             <div className="bg-primary/10 p-3 rounded-md">
               <h4 className="font-medium text-sm mb-2">New Plan:</h4>
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <div>Type:</div>
-                <div className="font-medium capitalize">{selectedPlan} Plan</div>
-                
+                <div className="font-medium capitalize">
+                  {selectedPlan === 'limited' ? 'Daswos Limited' :
+                   selectedPlan === 'unlimited' ? 'Daswos Unlimited' :
+                   selectedPlan === 'individual' ? 'Individual (Legacy)' : 'Family (Legacy)'} Plan
+                </div>
+
                 <div>Price:</div>
                 <div className="font-medium">
-                  £{selectedPlan === "individual" ? "3" : "7"}/month
+                  {selectedPlan === 'limited' ? 'Free' :
+                   selectedPlan === 'unlimited' ? '£5/month' :
+                   '£5/month (Legacy Plan)'}
                 </div>
               </div>
             </div>
-            
+
             <Alert className="mt-4 bg-blue-50 border-blue-100 text-blue-700">
               <AlertTitle className="text-blue-800">Billing Information</AlertTitle>
               <AlertDescription className="text-blue-700">
-                Your new plan rate of £{selectedPlan === "individual" ? "3" : "7"} per month 
-                will take effect on your next billing date: {subscriptionDetails?.expiresAt 
-                  ? new Date(subscriptionDetails.expiresAt).toLocaleDateString()
-                  : 'Unknown'}.
-                You will not be charged again until that date.
+                {selectedPlan === 'limited' ? (
+                  <>
+                    Your new free plan will take effect on your next billing date: {subscriptionDetails?.expiresAt
+                      ? new Date(subscriptionDetails.expiresAt).toLocaleDateString()
+                      : 'Unknown'}.
+                    You will not be charged again after that date.
+                  </>
+                ) : (
+                  <>
+                    Your new plan rate of {
+                      selectedPlan === 'unlimited' ? '£9.99' :
+                      selectedPlan === 'individual' ? '£3' : '£7'
+                    } per month
+                    will take effect on your next billing date: {subscriptionDetails?.expiresAt
+                      ? new Date(subscriptionDetails.expiresAt).toLocaleDateString()
+                      : 'Unknown'}.
+                    You will not be charged again until that date.
+                  </>
+                )}
               </AlertDescription>
             </Alert>
           </div>
-          
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowPlanChangeConfirmation(false)}>
               Cancel

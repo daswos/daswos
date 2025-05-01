@@ -1,8 +1,9 @@
 import { pgTable, text, serial, integer, boolean, varchar, jsonb, timestamp, decimal, real, pgEnum, primaryKey, pgSchema } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod";
+import { never, z } from "zod";
 import { relations } from "drizzle-orm";
 import { sql } from "drizzle-orm";
+import { truncate } from "fs";
 
 // User Schema
 export const users = pgTable("users", {
@@ -16,10 +17,11 @@ export const users = pgTable("users", {
   isAdmin: boolean("is_admin").default(false).notNull(),
   avatar: text("avatar"),
   hasSubscription: boolean("has_subscription").default(false).notNull(),
-  subscriptionType: text("subscription_type"), // "standard" (free), "individual" or "family"
+  subscriptionType: text("subscription_type"), // "limited", "unlimited", or legacy types
   subscriptionExpiresAt: timestamp("subscription_expires_at"),
   // Family account fields
   isFamilyOwner: boolean("is_family_owner").default(false).notNull(),
+  familyOwnerId: integer("family_owner_id"), // For family member accounts, points to the owner
   parentAccountId: integer("parent_account_id"), // ID of the family owner account (null for family owners and individual accounts)
   isChildAccount: boolean("is_child_account").default(false).notNull(), // Whether this is a child account
   // SuperSafe mode fields
@@ -98,7 +100,7 @@ export const categoryClosure = pgTable("category_closure", {
 
 export const insertCategorySchema = createInsertSchema(categories).omit({
   id: true,
-  createdAt: true,
+  // createdAt: true, // Removed as it is not assignable
   updatedAt: true,
 });
 
@@ -170,6 +172,9 @@ export const searchQueries = pgTable("search_queries", {
   contentType: text("content_type").notNull().default("products"), // products, information
   filters: jsonb("filters"),
   userId: integer("user_id"),
+  // SuperSafe mode fields
+  superSafeEnabled: boolean("super_safe_enabled").default(false),
+  superSafeSettings: jsonb("super_safe_settings"),
 });
 
 export const searchQueriesRelations = relations(searchQueries, ({ one }) => ({
@@ -860,6 +865,58 @@ export type DaswosAiChatMessage = typeof daswosAiChatMessages.$inferSelect;
 export type InsertDaswosAiSource = z.infer<typeof insertDaswosAiSourceSchema>;
 export type DaswosAiSource = typeof daswosAiSources.$inferSelect;
 
+// User Sessions Schema
+export const userSessions = pgTable("user_sessions", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id),
+  sessionToken: text("session_token").notNull().unique(),
+  deviceInfo: jsonb("device_info").default({}),
+  isActive: boolean("is_active").default(true).notNull(),
+  lastActive: timestamp("last_active").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+});
+
+export const userSessionsRelations = relations(userSessions, ({ one }) => ({
+  user: one(users, {
+    fields: [userSessions.userId],
+    references: [users.id],
+  }),
+}));
+
+export type UserSession = typeof userSessions.$inferSelect;
+
+// Family Invitation Codes Schema - for family account invitations
+export const familyInvitationCodes = pgTable("family_invitation_codes", {
+  id: serial("id").primaryKey(),
+  code: text("code").notNull().unique(),
+  ownerUserId: integer("owner_user_id").notNull().references(() => users.id),
+  email: text("email"), // Optional email to send invitation to
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  isUsed: boolean("is_used").default(false).notNull(),
+  usedByUserId: integer("used_by_user_id").references(() => users.id),
+});
+
+export const familyInvitationCodesRelations = relations(familyInvitationCodes, ({ one }) => ({
+  owner: one(users, {
+    fields: [familyInvitationCodes.ownerUserId],
+    references: [users.id],
+  }),
+  usedBy: one(users, {
+    fields: [familyInvitationCodes.usedByUserId],
+    references: [users.id],
+  }),
+}));
+
+export type FamilyInvitationCode = typeof familyInvitationCodes.$inferSelect;
+export const insertFamilyInvitationCodeSchema = createInsertSchema(familyInvitationCodes).omit({
+  createdAt: true,
+  isUsed: true,
+  usedByUserId: true,
+});
+export type InsertFamilyInvitationCode = z.infer<typeof insertFamilyInvitationCodeSchema>;
+
 // Adding the missing category relations at the end to avoid circular references
 export const categoriesRelations = relations(categories, ({ many, one }) => ({
   children: many(categories, { relationName: "parentChild" }),
@@ -878,3 +935,10 @@ export const productsCategoryRelation = relations(products, ({ one }) => ({
     references: [categories.id],
   }),
 }));
+
+
+
+
+
+
+
