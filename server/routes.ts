@@ -293,38 +293,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Save search query
-  app.post("/api/search", async (req, res) => {
-    try {
-      // Get user ID from session if authenticated
-      const userId = req.isAuthenticated() ? req.user.id : null;
+app.post('/api/create-payment-intent', async (req, res) => {
+  try {
+    const { amount, selectedPlan, billingCycle } = req.body;
 
-      // Extend the schema to include SuperSafe Mode fields
-      const extendedSearchSchema = insertSearchQuerySchema.extend({
-        superSafeEnabled: z.boolean().optional(),
-        superSafeSettings: z.object({
-          blockGambling: z.boolean(),
-          blockAdultContent: z.boolean(),
-          blockOpenSphere: z.boolean()
-        }).optional().nullable(),
-        userId: z.number().optional().nullable()
-      });
+    // Create a PaymentIntent with the order amount and currency
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: amount * 100, // amount in cents
+      currency: 'usd',
+      // Add any additional Stripe options here
+    });
 
-      // Parse the request body with the extended schema
-      const searchData = extendedSearchSchema.parse({
-        ...req.body,
-        userId: userId || req.body.userId || null
-      });
-
-      const savedQuery = await storage.saveSearchQuery(searchData);
-      res.status(201).json(savedQuery);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid search data", errors: error.errors });
-      }
-      res.status(500).json({ message: "Failed to save search query" });
-    }
-  });
-
+    res.json({
+      clientSecret: paymentIntent.client_secret,
+    });
+  } catch (err) {
+    console.error('Error creating payment intent:', err);
+    res.status(500).json({ error: 'Failed to create payment intent' });
+  }
+});
   // Get recent searches
   app.get("/api/searches/recent", async (req, res) => {
     try {
