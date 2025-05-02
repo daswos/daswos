@@ -53,12 +53,11 @@ const SafeSphereSubscription: React.FC = () => {
   const [location, setLocation] = useLocation();
   const { subscriptionMutation, user, hasSubscription, registerMutation, loginMutation, subscriptionDetails } = useAuth();
   const { settings } = useAdminSettings();
-  const [selectedPlan, setSelectedPlan] = useState<"limited" | "unlimited">('limited');
+  const [selectedPlan, setSelectedPlan] = useState<"limited" | "unlimited">('unlimited');
   const [billingCycle, setBillingCycle] = useState<string>('monthly');
   const [paymentSuccess, setPaymentSuccess] = useState<boolean>(false);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [showPaymentForm, setShowPaymentForm] = useState<boolean>(false);
-  const [showSignupForm, setShowSignupForm] = useState<boolean>(false);
   const [showUnsubscribeDialog, setShowUnsubscribeDialog] = useState<boolean>(false);
   // We no longer need login/register tabs as we're simplifying to registration only
   // const [activeTab, setActiveTab] = useState<"login" | "register">("login");
@@ -130,12 +129,29 @@ const SafeSphereSubscription: React.FC = () => {
     }
   });
 
-  // Check URL parameters on mount
+  // Check URL parameters on mount and check if user already has a subscription
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const urlSelectedPlan = urlParams.get('selectedPlan');
     const urlBillingCycle = urlParams.get('billingCycle');
     const showPayment = urlParams.get('showPayment');
+    const success = urlParams.get('success');
+
+    // If the user just completed a successful subscription, redirect to home
+    if (success === 'true' && user && user.hasSubscription) {
+      console.log('User has successfully subscribed, redirecting to home page');
+      toast({
+        title: "Subscription Activated",
+        description: `Your ${user.subscriptionType} plan has been activated. You now have access to all premium features.`,
+        variant: "default",
+      });
+
+      // Redirect to home page after a short delay to allow the toast to be seen
+      setTimeout(() => {
+        setLocation('/');
+      }, 1500);
+      return;
+    }
 
     if (urlSelectedPlan === 'limited' || urlSelectedPlan === 'unlimited') {
       setSelectedPlan(urlSelectedPlan);
@@ -150,7 +166,7 @@ const SafeSphereSubscription: React.FC = () => {
       console.log('Auto-showing payment form for', urlSelectedPlan, 'plan with', urlBillingCycle, 'billing');
       setShowPaymentForm(true);
     }
-  }, [user]);
+  }, [user, toast, setLocation]);
 
   // Handle select plan button click
   const handleSelectPlan = () => {
@@ -176,8 +192,16 @@ const SafeSphereSubscription: React.FC = () => {
         setShowPaymentForm(true);
       }
     } else {
-      // If user is not logged in, show the registration form right here
-      setShowSignupForm(true);
+      // If user is not logged in, go directly to the payment form
+      // which now includes account creation functionality
+      setShowPaymentForm(true);
+
+      // Show a helpful toast message
+      toast({
+        title: "Create an Account",
+        description: "You'll need to create an account during the payment process to continue with your subscription.",
+        variant: "default",
+      });
     }
   };
 
@@ -305,10 +329,23 @@ const SafeSphereSubscription: React.FC = () => {
     }
   };
 
+  // Auto-redirect to home after successful subscription
+  useEffect(() => {
+    if (paymentSuccess) {
+      const timer = setTimeout(() => {
+        if (returnTo !== '/') {
+          setLocation(returnTo);
+        } else {
+          setLocation('/');
+        }
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [paymentSuccess, returnTo, setLocation]);
+
   // Close the payment form and return to plans
   const handleBackToPlans = () => {
     setShowPaymentForm(false);
-    setShowSignupForm(false);
   };
 
   // Calculate pricing based on selection
@@ -339,69 +376,8 @@ const SafeSphereSubscription: React.FC = () => {
     return '0';
   };
 
-  // Store registration data for the payment form
-  const [registrationData, setRegistrationData] = useState<{
-    username: string;
-    email: string;
-    fullName: string;
-    password: string;
-  } | null>(null);
-
-  // Validate registration data without creating an account
-  const handleRegisterSubmit = async (data: z.infer<typeof registerSchema>) => {
-    try {
-      const { confirmPassword, ...registerData } = data;
-
-      // First validate the credentials
-      const response = await fetch('/api/validate-registration', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(registerData),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-
-        // Handle specific validation errors
-        if (errorData.error.includes('Email already in use')) {
-          toast({
-            title: "Email Already Registered",
-            description: "An account already exists with this email. Please go back to plans and log in first.",
-            variant: "default",
-          });
-        } else if (errorData.error.includes('Username already exists')) {
-          toast({
-            title: "Username Already Taken",
-            description: "This username is already taken. Please choose a different username.",
-            variant: "destructive",
-          });
-        } else {
-          toast({
-            title: "Validation Failed",
-            description: errorData.error || "There was an error validating your information. Please try again.",
-            variant: "destructive",
-          });
-        }
-        return;
-      }
-
-      // Validation passed, save data and show payment form
-      setRegistrationData(registerData);
-      setShowSignupForm(false); // Hide the signup form
-      setShowPaymentForm(true); // Show the payment form
-      toast({
-        title: "Information Verified",
-        description: "Your information has been verified. Please complete your payment to create your account.",
-        variant: "default",
-      });
-    } catch (error: any) {
-      toast({
-        title: "Validation Error",
-        description: error.message || "There was an error validating your account information. Please try again.",
-        variant: "destructive",
-      });
-    }
-  };
+  // We no longer need to store registration data separately
+  // as it's handled directly in the SimpleStripeForm component
 
   // Add handler for login
   const handleLoginSubmit = (data: z.infer<typeof loginSchema>) => {
@@ -478,13 +454,7 @@ const SafeSphereSubscription: React.FC = () => {
   }, [settings.paidFeaturesDisabled, settings.subscriptionDevMode, setLocation, toast]);
 
   return (
-    <div className="container mx-auto px-4 py-12">
-      <h1 className="text-3xl font-bold text-center mb-2">
-        <span className="text-primary-500">Daswos</span> Subscription
-      </h1>
-      <p className="text-center text-gray-600 mb-8 max-w-2xl mx-auto">
-        Unlock premium Daswos features to enhance your security and protect your transactions.
-      </p>
+    <div className="container mx-auto px-4 py-4">
 
       {(settings.paidFeaturesDisabled || settings.subscriptionDevMode) && (
         <Alert className="max-w-2xl mx-auto mb-8" variant="default">
@@ -503,190 +473,80 @@ const SafeSphereSubscription: React.FC = () => {
       )}
 
       {paymentSuccess ? (
-        <div className="max-w-md mx-auto text-center py-12">
-          <div className="bg-green-100 rounded-full h-24 w-24 flex items-center justify-center mx-auto mb-6">
-            <CheckCircle className="h-12 w-12 text-green-600" />
+        <div className="max-w-md mx-auto text-center py-6">
+          <div className="bg-green-100 rounded-full h-16 w-16 flex items-center justify-center mx-auto mb-4">
+            <CheckCircle className="h-8 w-8 text-green-600" />
           </div>
-          <h2 className="text-2xl font-bold text-green-700 mb-4">Subscription Activated!</h2>
-          <p className="text-gray-600 mb-6">
+          <h2 className="text-xl font-bold text-green-700 mb-2">Subscription Activated!</h2>
+          <p className="text-gray-600 text-sm">
             {subscriptionMutation.variables?.action === "switch" ? (
-              <>Your SafeSphere {selectedPlan} subscription has been updated. You still have access to all premium features.</>
+              <>Your Daswos Unlimited subscription has been updated. You now have access to all premium features.</>
             ) : (
-              <>Your SafeSphere {selectedPlan} subscription has been activated. You now have access to all premium features.</>
+              <>Your Daswos Unlimited subscription has been activated. You now have access to all premium features.</>
             )}
           </p>
-          <Button onClick={handleBackToHome} className="w-full">
-            Back to Home
-          </Button>
-        </div>
-      ) : showSignupForm ? (
-        <div className="max-w-md mx-auto">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Create an Account</CardTitle>
-                  <CardDescription>
-                    Sign up to continue with your {selectedPlan} plan subscription
-                  </CardDescription>
-                </div>
-                <Button variant="outline" size="sm" onClick={handleBackToPlans}>
-                  Back to Plans
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="bg-blue-50 p-3 rounded-md mb-4 flex items-start">
-                <ShieldCheck className="h-5 w-5 text-blue-600 mr-2 mt-0.5" />
-                <div>
-                  <p className="text-sm font-medium text-blue-800">
-                    Selected Plan: {selectedPlan === 'individual' ? 'Individual' : 'Family'} Plan
-                  </p>
-                  <p className="text-xs text-blue-700">
-                    {billingCycle === 'monthly' ? 'Monthly' : 'Annual'} billing at {getPriceDisplay()}
-                  </p>
-                </div>
-              </div>
-
-              <div className="py-2 mb-4">
-                <p className="text-sm text-gray-600">
-                  Please create a new account to continue with your subscription. If you already have an account, please go back to the plans page and log in first.
-                </p>
-              </div>
-
-              <Form {...registerForm}>
-                <form onSubmit={registerForm.handleSubmit(handleRegisterSubmit)} className="space-y-4">
-                      <FormField
-                        control={registerForm.control}
-                        name="username"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Username</FormLabel>
-                            <FormControl>
-                              <Input placeholder="Choose a username" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={registerForm.control}
-                        name="email"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Email</FormLabel>
-                            <FormControl>
-                              <Input type="email" placeholder="Your email address" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={registerForm.control}
-                        name="fullName"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Full Name</FormLabel>
-                            <FormControl>
-                              <Input placeholder="Your full name" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={registerForm.control}
-                        name="password"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Password</FormLabel>
-                            <FormControl>
-                              <Input type="password" placeholder="Create a password" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={registerForm.control}
-                        name="confirmPassword"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Confirm Password</FormLabel>
-                            <FormControl>
-                              <Input type="password" placeholder="Confirm your password" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <Button type="submit" className="w-full" disabled={registerMutation.isPending}>
-                        {registerMutation.isPending ? (
-                          <>
-                            <svg className="animate-spin -ml-1 mr-3 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                            Creating account...
-                          </>
-                        ) : (
-                          "Create Account"
-                        )}
-                      </Button>
-                    </form>
-                  </Form>
-            </CardContent>
-          </Card>
         </div>
       ) : showPaymentForm ? (
         <div className="max-w-md mx-auto">
-          <Card>
-            <CardHeader>
+          <Card className="shadow-sm border border-gray-200">
+            <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>Payment Details</CardTitle>
-                  <CardDescription>Complete your Daswos {selectedPlan === 'unlimited' ? 'Unlimited' : 'Limited'} plan subscription</CardDescription>
+                  <CardTitle className="text-base">Payment Details</CardTitle>
+                  <CardDescription className="text-xs">Complete your Daswos Unlimited subscription</CardDescription>
                 </div>
-                <Button variant="outline" size="sm" onClick={handleBackToPlans}>
-                  Back to Plans
+                <Button variant="outline" size="sm" onClick={handleBackToPlans} className="h-7 text-xs px-2">
+                  Back
                 </Button>
               </div>
             </CardHeader>
-            <CardContent>
-              {/* Removed redundant subscription message - the StripeWrapper component already shows this information */}
+            <CardContent className="pt-2">
+              {/* Order Summary */}
+              <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-100 dark:border-gray-700">
+                <h3 className="font-medium text-gray-800 dark:text-white text-xs mb-2">Order Summary</h3>
+                <div className="space-y-1 text-xs">
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600 dark:text-gray-300">Plan:</span>
+                    <span className="font-semibold text-black dark:text-white">Daswos Unlimited</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600 dark:text-gray-300">Billing:</span>
+                    <span className="text-black dark:text-white">{billingCycle === 'monthly' ? 'Monthly' : 'Annual'}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600 dark:text-gray-300">Price:</span>
+                    <span className="text-black dark:text-white">£{getPriceDisplay()} {billingCycle === 'monthly' ? 'per month' : 'per year'}</span>
+                  </div>
+                  {billingCycle === 'annual' && (
+                    <div className="flex justify-between items-center text-green-600 dark:text-green-400">
+                      <span>Savings:</span>
+                      <span>£{getSavings()} annually</span>
+                    </div>
+                  )}
+                  <Separator className="my-1" />
+                  <div className="flex justify-between items-center font-bold text-black dark:text-white">
+                    <span>Total:</span>
+                    <span>£{getPriceDisplay()}</span>
+                  </div>
+                </div>
+              </div>
 
               {/* Use SimpleStripeForm for more reliable testing */}
-              <SimpleStripeForm
-                selectedPlan={selectedPlan as 'limited' | 'unlimited' | 'individual' | 'family'}
-                billingCycle={billingCycle as 'monthly' | 'annual'}
-                onSuccess={() => {
-                  setPaymentSuccess(true);
-                  toast({
-                    title: "Payment Successful",
-                    description: `Your ${selectedPlan} plan has been activated.`,
-                    variant: "default",
-                  });
-                }}
-                onCancel={handleBackToPlans}
-              />
-
-              {/* Original Stripe form - commented out for now
-              <StripeWrapper
-                selectedPlan={selectedPlan as 'limited' | 'unlimited' | 'individual' | 'family'}
-                billingCycle={billingCycle as 'monthly' | 'annual'}
-                registrationData={registrationData || undefined}
-                onSuccess={() => {
-                  setPaymentSuccess(true);
-                  toast({
-                    title: "Payment Successful",
-                    description: `Your ${selectedPlan} plan has been activated.`,
-                    variant: "default",
-                  });
-                }}
-                onCancel={handleBackToPlans}
-              />
-              */}
+              <div className="text-xs">
+                <SimpleStripeForm
+                  selectedPlan={selectedPlan as 'limited' | 'unlimited' | 'individual' | 'family'}
+                  billingCycle={billingCycle as 'monthly' | 'annual'}
+                  onSuccess={() => {
+                    setPaymentSuccess(true);
+                    toast({
+                      title: "Payment Successful",
+                      description: `Your ${selectedPlan} plan has been activated.`,
+                      variant: "default",
+                    });
+                  }}
+                  onCancel={handleBackToPlans}
+                />
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -783,222 +643,145 @@ const SafeSphereSubscription: React.FC = () => {
           ) : null}
 
           {/* Billing Cycle Selection */}
-          <div className="max-w-md mx-auto mb-8">
-            <div className="bg-gray-100 p-4 rounded-lg flex justify-center mb-8">
-              <RadioGroup
-                defaultValue="monthly"
-                className="flex"
-                orientation="horizontal"
-                onValueChange={setBillingCycle}
+          <div className="max-w-md mx-auto mb-4">
+            <div className="flex justify-center mb-1">
+              <h3 className="text-xs font-medium text-gray-700 dark:text-white">Choose Your Billing Cycle</h3>
+            </div>
+            <RadioGroup
+              value={billingCycle}
+              onValueChange={setBillingCycle}
+              className="grid grid-cols-2 gap-2"
+            >
+              <div
+                className={`border rounded-lg p-2 cursor-pointer transition-all ${
+                  billingCycle === 'monthly'
+                    ? 'border-primary-500 bg-primary-50 dark:bg-gray-700 shadow-sm'
+                    : 'border-gray-200 dark:border-gray-600 hover:border-primary-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                }`}
+                onClick={() => setBillingCycle('monthly')}
               >
-                <div className="flex items-center mr-6">
-                  <RadioGroupItem value="monthly" id="monthly" className="mr-2" />
-                  <Label htmlFor="monthly">Monthly</Label>
-                </div>
                 <div className="flex items-center">
-                  <RadioGroupItem value="annual" id="annual" className="mr-2" />
-                  <Label htmlFor="annual">Annual (Save 16%)</Label>
+                  <RadioGroupItem
+                    value="monthly"
+                    id="monthly"
+                    className="mr-1.5"
+                  />
+                  <Label htmlFor="monthly" className="font-medium text-xs text-black dark:text-white">Monthly</Label>
                 </div>
-              </RadioGroup>
+                <div className="pl-5 text-xs text-gray-600 dark:text-gray-300">
+                  <p className="text-black dark:text-white">£5 per month</p>
+                  <p>Flexible, cancel anytime</p>
+                </div>
+              </div>
+
+              <div
+                className={`border rounded-lg p-2 cursor-pointer transition-all ${
+                  billingCycle === 'annual'
+                    ? 'border-primary-500 bg-primary-50 dark:bg-gray-700 shadow-sm'
+                    : 'border-gray-200 dark:border-gray-600 hover:border-primary-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                }`}
+                onClick={() => setBillingCycle('annual')}
+              >
+                <div className="flex items-center">
+                  <RadioGroupItem
+                    value="annual"
+                    id="annual"
+                    className="mr-1.5"
+                  />
+                  <Label htmlFor="annual" className="font-medium text-xs text-black dark:text-white">Annual</Label>
+                  <Badge className="ml-1 bg-green-100 text-green-800 text-xs px-1 py-0">Save 16%</Badge>
+                </div>
+                <div className="pl-5 text-xs text-gray-600 dark:text-gray-300">
+                  <p className="text-black dark:text-white">£50 per year</p>
+                  <p>Best value, save £10</p>
+                </div>
+              </div>
+            </RadioGroup>
+          </div>
+
+          <div className="max-w-md mx-auto mb-4">
+            <div className="border rounded-lg p-3 border-primary-500 bg-white dark:bg-gray-800 shadow-sm">
+              <div className="flex justify-between items-start mb-2">
+                <div>
+                  <h2 className="text-lg font-bold text-gray-800 dark:text-white">Daswos Unlimited</h2>
+                  <p className="text-gray-600 dark:text-gray-300 text-xs">Complete protection with AI features</p>
+                </div>
+                <Users className="h-5 w-5 text-primary-600 dark:text-primary-400" />
+              </div>
+
+              <div className="flex items-baseline mb-2">
+                <span className="text-xl font-bold dark:text-white">£{billingCycle === 'monthly' ? '5' : '50'}</span>
+                <span className="text-gray-600 dark:text-gray-300 ml-1 text-xs">/{billingCycle === 'monthly' ? 'month' : 'year'}</span>
+                <Badge className="ml-2 bg-green-100 text-green-800 hover:bg-green-100 text-xs px-1 py-0 dark:bg-green-900 dark:text-green-100">Up to 5 Accounts</Badge>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 mb-2">
+                <div>
+                  <h3 className="font-medium text-gray-700 dark:text-white mb-0.5 text-xs">Premium Features</h3>
+                  <ul className="space-y-0.5 text-xs">
+                    <li className="flex items-center">
+                      <CheckCircle className="h-3 w-3 text-green-500 dark:text-green-400 mr-1 flex-shrink-0" />
+                      <span className="dark:text-white">SafeSphere protection</span>
+                    </li>
+                    <li className="flex items-center">
+                      <CheckCircle className="h-3 w-3 text-green-500 dark:text-green-400 mr-1 flex-shrink-0" />
+                      <span className="dark:text-white">SuperSafe mode</span>
+                    </li>
+                    <li className="flex items-center">
+                      <CheckCircle className="h-3 w-3 text-green-500 dark:text-green-400 mr-1 flex-shrink-0" />
+                      <span className="dark:text-white">Daswos AI search</span>
+                    </li>
+                    <li className="flex items-center">
+                      <CheckCircle className="h-3 w-3 text-green-500 dark:text-green-400 mr-1 flex-shrink-0" />
+                      <span className="dark:text-white">AutoShop integration</span>
+                    </li>
+                  </ul>
+                </div>
+                <div>
+                  <h3 className="font-medium text-gray-700 dark:text-white mb-0.5 text-xs">Account Benefits</h3>
+                  <ul className="space-y-0.5 text-xs">
+                    <li className="flex items-center">
+                      <CheckCircle className="h-3 w-3 text-green-500 dark:text-green-400 mr-1 flex-shrink-0" />
+                      <span className="dark:text-white">Family account support</span>
+                    </li>
+                    <li className="flex items-center">
+                      <CheckCircle className="h-3 w-3 text-green-500 dark:text-green-400 mr-1 flex-shrink-0" />
+                      <span className="dark:text-white">Control umbrella accounts</span>
+                    </li>
+                    <li className="flex items-center">
+                      <CheckCircle className="h-3 w-3 text-green-500 dark:text-green-400 mr-1 flex-shrink-0" />
+                      <span className="dark:text-white">Priority support</span>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+
+              <div className="p-1.5 bg-blue-50 dark:bg-blue-900 rounded-md text-xs">
+                <div className="flex items-start">
+                  <ShieldCheck className="h-3 w-3 text-blue-600 dark:text-blue-400 mr-1 mt-0.5" />
+                  <p className="text-blue-700 dark:text-blue-200 text-xs">
+                    Advanced protection features, AI capabilities, and access to exclusive verified sellers.
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
 
-          <RadioGroup
-            value={selectedPlan}
-            onValueChange={setSelectedPlan}
-            className="space-y-8"
-          >
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto mb-8">
-              {/* Limited Plan (Free) */}
-              <div className="flex flex-col">
-                <Card className={`border-2 ${selectedPlan === 'limited' ? 'border-primary-500' : 'border-gray-200'} h-full`}>
-                  <CardHeader>
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <CardTitle>Daswos Limited</CardTitle>
-                        <CardDescription>Basic protection for individuals</CardDescription>
-                      </div>
-                      <Shield className="h-8 w-8 text-primary-500" />
-                    </div>
-                    <div className="mt-4">
-                      <span className="text-3xl font-bold">Free</span>
-                      <Badge className="ml-2 bg-blue-100 text-blue-800 hover:bg-blue-100">Individual Only</Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="flex-grow">
-                    <ul className="space-y-2">
-                      <li className="flex items-center">
-                        <CheckCircle className="h-5 w-5 text-green-500 mr-2" />
-                        <span>SafeSphere protection</span>
-                      </li>
-                      <li className="flex items-center">
-                        <CheckCircle className="h-5 w-5 text-green-500 mr-2" />
-                        <span>SuperSafe mode</span>
-                      </li>
-                      <li className="flex items-center">
-                        <CheckCircle className="h-5 w-5 text-green-500 mr-2" />
-                        <span>All features except Daswos AI</span>
-                      </li>
-                    </ul>
-                  </CardContent>
-                  <CardFooter>
-                    <div className="flex items-center space-x-2 w-full">
-                      <RadioGroupItem
-                        value="limited"
-                        id="limited"
-                        disabled={hasSubscription && subscriptionDetails?.type === 'limited'}
-                      />
-                      <Label htmlFor="limited" className="flex-grow font-medium">
-                        {hasSubscription && subscriptionDetails?.type === 'limited'
-                          ? "Current Plan"
-                          : "Select Limited Plan"}
-                      </Label>
-                    </div>
-                  </CardFooter>
-                </Card>
-              </div>
-
-              {/* Unlimited Plan (Paid) */}
-              <div className="flex flex-col">
-                <Card className={`border-2 ${selectedPlan === 'unlimited' ? 'border-primary-500' : 'border-gray-200'} h-full`}>
-                  <CardHeader>
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <CardTitle>Daswos Unlimited</CardTitle>
-                        <CardDescription>Complete protection with AI features</CardDescription>
-                      </div>
-                      <Users className="h-8 w-8 text-primary-500" />
-                    </div>
-                    <div className="mt-4">
-                      <span className="text-3xl font-bold">£{billingCycle === 'monthly' ? '5' : '50'}</span>
-                      <span className="text-gray-500">/{billingCycle === 'monthly' ? 'month' : 'year'}</span>
-                      <Badge className="ml-2 bg-green-100 text-green-800 hover:bg-green-100">Up to 5 Accounts</Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="flex-grow">
-                    <ul className="space-y-2">
-                      <li className="flex items-center">
-                        <CheckCircle className="h-5 w-5 text-green-500 mr-2" />
-                        <span>All Limited plan features</span>
-                      </li>
-                      <li className="flex items-center">
-                        <CheckCircle className="h-5 w-5 text-green-500 mr-2" />
-                        <span>Daswos AI search</span>
-                      </li>
-                      <li className="flex items-center">
-                        <CheckCircle className="h-5 w-5 text-green-500 mr-2" />
-                        <span>AutoShop integration</span>
-                      </li>
-                      <li className="flex items-center">
-                        <CheckCircle className="h-5 w-5 text-green-500 mr-2" />
-                        <span>Family account support (up to 5 accounts)</span>
-                      </li>
-                      <li className="flex items-center">
-                        <CheckCircle className="h-5 w-5 text-green-500 mr-2" />
-                        <span>Control of umbrella accounts' SafeSphere and SuperSafe settings</span>
-                      </li>
-                    </ul>
-                  </CardContent>
-                  <CardFooter>
-                    <div className="flex items-center space-x-2 w-full">
-                      <RadioGroupItem
-                        value="unlimited"
-                        id="unlimited"
-                        disabled={hasSubscription && subscriptionDetails?.type === 'unlimited'}
-                      />
-                      <Label htmlFor="unlimited" className="flex-grow font-medium">
-                        {hasSubscription && subscriptionDetails?.type === 'unlimited'
-                          ? "Current Plan"
-                          : "Select Unlimited Plan"}
-                      </Label>
-                    </div>
-                  </CardFooter>
-                </Card>
-              </div>
-            </div>
-          </RadioGroup>
-
-          {/* Continue with Plan Button - More prominent and above Order Summary */}
-          <div className="flex justify-center mb-6">
+          {/* Subscribe Button */}
+          <div className="flex justify-center mb-4">
             <Button
               onClick={user && hasSubscription ? handleSwitchPlan : handleSelectPlan}
-              className="px-8 py-6 text-lg font-semibold bg-primary-600 hover:bg-primary-700"
+              className="px-8 py-2 font-medium bg-primary-600 hover:bg-primary-700 shadow-sm transition-all hover:shadow-md text-black dark:text-white"
+              variant="default"
             >
               {user && hasSubscription
-                ? 'Switch to this Plan'
+                ? 'Switch to Unlimited Plan'
                 : user
                   ? 'Continue to Payment'
-                  : 'Continue with this Plan'
+                  : 'Subscribe to Unlimited'
               }
-              <ArrowRight className="ml-2 h-5 w-5" />
+              <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
-          </div>
-
-          <div className="max-w-md mx-auto">
-            <Card>
-              <CardHeader>
-                <CardTitle>Order Summary</CardTitle>
-                <CardDescription>Daswos Subscription</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="flex justify-between">
-                    <span>Selected Plan:</span>
-                    <span className="font-semibold">
-                      {selectedPlan === 'limited' ? 'Daswos Limited' :
-                       selectedPlan === 'unlimited' ? 'Daswos Unlimited' :
-                       selectedPlan === 'individual' ? 'Individual (Legacy)' : 'Family (Legacy)'} Plan
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Billing Cycle:</span>
-                    <span>
-                      {billingCycle === 'monthly' ? 'Monthly' : 'Annual'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Price:</span>
-                    <span>
-                      £{getPriceDisplay()} {billingCycle === 'monthly' ? 'per month' : 'per year'}
-                    </span>
-                  </div>
-                  {billingCycle === 'annual' && (
-                    <div className="flex justify-between text-green-600">
-                      <span>You save:</span>
-                      <span>£{getSavings()} annually</span>
-                    </div>
-                  )}
-                  <Separator />
-                  <div className="flex justify-between font-bold">
-                    <span>Total:</span>
-                    <span>
-                      £{getPriceDisplay()}
-                    </span>
-                  </div>
-                </div>
-              </CardContent>
-              <CardFooter>
-                <Button
-                  onClick={user && hasSubscription ? handleSwitchPlan : handleSelectPlan}
-                  className="w-full"
-                >
-                  {user && hasSubscription
-                    ? 'Switch to this Plan'
-                    : user
-                      ? 'Continue to Payment'
-                      : 'Continue with this Plan'
-                  }
-                </Button>
-              </CardFooter>
-            </Card>
-
-            <Alert className="mt-6 bg-blue-50 border-blue-100">
-              <ShieldCheck className="h-4 w-4 text-blue-600" />
-              <AlertTitle className="text-blue-800">Enhanced Protection</AlertTitle>
-              <AlertDescription className="text-blue-700">
-                Daswos Unlimited subscription gives you advanced protection features, AI capabilities, and access to exclusive verified sellers.
-              </AlertDescription>
-            </Alert>
           </div>
         </>
       )}
@@ -1006,9 +789,9 @@ const SafeSphereSubscription: React.FC = () => {
       <Dialog open={showPlanChangeConfirmation} onOpenChange={setShowPlanChangeConfirmation}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Confirm Daswos Plan Change</DialogTitle>
+            <DialogTitle>Confirm Daswos Unlimited Subscription</DialogTitle>
             <DialogDescription>
-              You are changing your Daswos subscription plan.
+              You are subscribing to the Daswos Unlimited plan.
             </DialogDescription>
           </DialogHeader>
 
@@ -1027,7 +810,8 @@ const SafeSphereSubscription: React.FC = () => {
                 <div>Price:</div>
                 <div className="font-medium">
                   {subscriptionDetails?.type === 'limited' ? 'Free' :
-                   subscriptionDetails?.type === 'unlimited' ? '£5/month' :
+                   subscriptionDetails?.type === 'unlimited' ?
+                     (subscriptionDetails?.billingCycle === 'annual' ? '£50/year' : '£5/month') :
                    '£5/month (Legacy Plan)'}
                 </div>
 
@@ -1048,16 +832,17 @@ const SafeSphereSubscription: React.FC = () => {
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <div>Type:</div>
                 <div className="font-medium capitalize">
-                  {selectedPlan === 'limited' ? 'Daswos Limited' :
-                   selectedPlan === 'unlimited' ? 'Daswos Unlimited' :
-                   selectedPlan === 'individual' ? 'Individual (Legacy)' : 'Family (Legacy)'} Plan
+                  Daswos Unlimited Plan
                 </div>
 
                 <div>Price:</div>
                 <div className="font-medium">
-                  {selectedPlan === 'limited' ? 'Free' :
-                   selectedPlan === 'unlimited' ? '£5/month' :
-                   '£5/month (Legacy Plan)'}
+                  £{billingCycle === 'monthly' ? '5/month' : '50/year'}
+                </div>
+
+                <div>Features:</div>
+                <div className="font-medium">
+                  All premium features including Daswos AI
                 </div>
               </div>
             </div>
@@ -1065,23 +850,17 @@ const SafeSphereSubscription: React.FC = () => {
             <Alert className="mt-4 bg-blue-50 border-blue-100 text-blue-700">
               <AlertTitle className="text-blue-800">Billing Information</AlertTitle>
               <AlertDescription className="text-blue-700">
-                {selectedPlan === 'limited' ? (
+                {subscriptionDetails?.expiresAt ? (
                   <>
-                    Your new free plan will take effect on your next billing date: {subscriptionDetails?.expiresAt
-                      ? new Date(subscriptionDetails.expiresAt).toLocaleDateString()
-                      : 'Unknown'}.
-                    You will not be charged again after that date.
+                    Your new Unlimited plan rate of £{billingCycle === 'monthly' ? '5' : '50'}
+                    {billingCycle === 'monthly' ? ' per month' : ' per year'} will take effect on your next billing date:
+                    {' '}{new Date(subscriptionDetails.expiresAt).toLocaleDateString()}.
+                    You will not be charged again until that date.
                   </>
                 ) : (
                   <>
-                    Your new plan rate of {
-                      selectedPlan === 'unlimited' ? '£9.99' :
-                      selectedPlan === 'individual' ? '£3' : '£7'
-                    } per month
-                    will take effect on your next billing date: {subscriptionDetails?.expiresAt
-                      ? new Date(subscriptionDetails.expiresAt).toLocaleDateString()
-                      : 'Unknown'}.
-                    You will not be charged again until that date.
+                    Your Unlimited plan subscription of £{billingCycle === 'monthly' ? '5' : '50'}
+                    {billingCycle === 'monthly' ? ' per month' : ' per year'} will begin immediately.
                   </>
                 )}
               </AlertDescription>
@@ -1092,8 +871,8 @@ const SafeSphereSubscription: React.FC = () => {
             <Button variant="outline" onClick={() => setShowPlanChangeConfirmation(false)}>
               Cancel
             </Button>
-            <Button onClick={completeSubscriptionSwitch}>
-              Confirm Change
+            <Button onClick={completeSubscriptionSwitch} className="bg-primary-600 hover:bg-primary-700 text-black dark:text-white">
+              Confirm Subscription
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -393,6 +393,11 @@ const CheckoutForm: React.FC<CheckoutFormProps> = ({
 
         setSucceeded(true);
         onSuccess();
+
+        // Redirect to home page after a short delay
+        setTimeout(() => {
+          window.location.href = '/';
+        }, 2000);
       }
       } catch (stripeError) {
         console.error('Error during Stripe payment confirmation:', stripeError);

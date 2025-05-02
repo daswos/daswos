@@ -10,7 +10,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useAdminSettings } from '@/hooks/use-admin-settings';
 import DasWosLogo from '@/components/daswos-logo';
 import AnimatedTrustText from '@/components/animated-trust-text';
-import BackButton from '@/components/back-button';
+
 
 const SearchEngine: React.FC = () => {
   const [, setLocation] = useLocation();
@@ -136,10 +136,7 @@ const SearchEngine: React.FC = () => {
     <div className="min-h-screen flex flex-col">
       {/* Design with proper dark mode support */}
       <div className="bg-[#E0E0E0] dark:bg-[#222222] pt-16 pb-8 flex-grow flex items-center">
-        {/* Back button */}
-        <div className="absolute top-4 left-4">
-          <BackButton fallbackPath="/d-list" />
-        </div>
+        {/* Back button removed - now using the one in the navigation bar */}
 
         <div className="container mx-auto px-4 text-center w-full">
           {/* Logo with Theme Toggle */}
@@ -167,7 +164,7 @@ const SearchEngine: React.FC = () => {
               <AnimatedTrustText
                 sentences={[
                   "Search Engine - Find verified information and trusted content.",
-                  "Helping you find reliable information without worrying about scams."
+                  "Helping you find reliable information."
                 ]}
                 duration={5000} // 5 seconds per sentence
               />

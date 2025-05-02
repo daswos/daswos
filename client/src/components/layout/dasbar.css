@@ -60,6 +60,7 @@
   justify-content: center;
   position: relative;
   background-color: #f3f4f6; /* Light gray background */
+  color: #000000; /* Ensure text is black for visibility */
 }
 
 /* Specific styling for navigation items in the right group */
@@ -76,6 +77,12 @@
 .dasbar button.active {
   background-color: #000; /* Black background for active button */
   color: #fff; /* White text/icon for active button */
+}
+
+/* Dark mode active button */
+.dark .dasbar button.active {
+  background-color: #ffffff; /* White background for active button in dark mode */
+  color: #000000; /* Black text/icon for active button in dark mode */
 }
 
 .dasbar .container {
@@ -297,6 +304,17 @@
 
 .dasbar .more-button:hover svg {
   transform: translateX(2px);
+}
+
+/* Dark mode styling for nav items */
+.dark .dasbar .nav-item {
+  background-color: #000000; /* Black background in dark mode */
+  color: #ffffff; /* White text/icon in dark mode */
+  border: 1px solid #333333; /* Add border for better visibility */
+}
+
+.dark .dasbar .nav-item:hover {
+  background-color: #333333; /* Darker background on hover */
 }
 
 /* Dark mode hover for buttons */

@@ -123,7 +123,7 @@ const CartPage: React.FC = () => {
           <p className="text-gray-500 mb-6">Looks like you haven't added any items to your cart yet.</p>
           <Button
             onClick={() => navigate('/search?type=shopping')}
-            className="bg-primary hover:bg-primary/90"
+            className="bg-primary hover:bg-primary/90 text-black dark:text-black font-medium"
           >
             Start Shopping
           </Button>
@@ -252,7 +252,7 @@ const CartPage: React.FC = () => {
               </div>
 
               <Button
-                className="w-full bg-primary hover:bg-primary/90"
+                className="w-full bg-primary hover:bg-primary/90 text-black dark:text-black font-medium"
                 onClick={handleCheckout}
               >
                 <ShoppingCart className="h-4 w-4 mr-2" />
@@ -262,7 +262,7 @@ const CartPage: React.FC = () => {
               <div className="mt-4">
                 <Button
                   variant="outline"
-                  className="w-full"
+                  className="w-full dark:bg-gray-800 dark:text-white dark:border-gray-600"
                   onClick={() => navigate('/search?type=shopping')}
                 >
                   Continue Shopping

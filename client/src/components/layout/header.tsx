@@ -3,7 +3,7 @@ import { Link, useLocation } from 'wouter';
 import {
   LogOutIcon, ShoppingBag, UserIcon, ShieldCheck, Search,
   Split, ShoppingCart, Plus, Minus, Trash2, Info, MessageSquare,
-  ChevronDown, ChevronRight, Store as StoreIcon, Sun, Moon, Wallet, Package,
+  ChevronDown, ChevronRight, Store, Sun, Moon, Wallet, Package,
   Loader2, Settings, Cog
 } from 'lucide-react';
 // Theme provider removed as we're using a fixed logo
@@ -425,6 +425,15 @@ const Header = () => {
 
           {/* AI Search Button removed - now positioned under search bar */}
 
+          {/* Sell Button - Visible to all users */}
+          <button
+            onClick={() => handleNavigation(user?.isSeller ? '/my-listings' : '/seller-hub')}
+            className="bg-white px-2 py-1 border border-gray-300 text-black flex items-center text-xs mr-2"
+          >
+            <Store className="h-4 w-4 mr-1" />
+            <span>Sell</span>
+          </button>
+
           {/* Shopping Cart Button - Modern style matching user toggle */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -642,6 +651,11 @@ const Header = () => {
                   <DropdownMenuItem onClick={() => handleNavigation('/profile')} className="py-1 px-2 text-xs hover:bg-gray-200 rounded-none flex items-center user-menu-item">
                     <UserIcon className="mr-2 h-3 w-3" />
                     <span>My Profile</span>
+                  </DropdownMenuItem>
+
+                  <DropdownMenuItem onClick={() => handleNavigation(user?.isSeller ? '/my-listings' : '/seller-hub')} className="py-1 px-2 text-xs hover:bg-gray-200 rounded-none flex items-center user-menu-item">
+                    <Store className="mr-2 h-3 w-3" />
+                    <span>{user?.isSeller ? 'My Listings' : 'Become a Seller'}</span>
                   </DropdownMenuItem>
 
                   <DropdownMenuItem onClick={() => handleNavigation('/user-settings')} className="py-1 px-2 text-xs hover:bg-gray-200 rounded-none flex items-center user-menu-item">

@@ -1,9 +1,9 @@
+/* Import custom styles */
+@import url('./styles/select-fix.css');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-/* Import custom styles */
-@import url('./styles/select-fix.css');
 
 /* Global padding for dasbar */
 .page-content {
@@ -252,6 +252,14 @@
   .dark .btn-dark {
     background-color: #333333;
     color: white;
+  }
+
+  /* Ensure primary buttons have black text in dark mode for visibility */
+  .dark .bg-primary,
+  .dark .bg-primary\/90,
+  .dark button[class*="bg-primary"] {
+    color: #000000 !important;
+    font-weight: 500;
   }
 
   /* Logo in dark mode */

@@ -14,16 +14,16 @@ export default function TestSubscription() {
         const userResponse = await fetch('/api/user', {
           credentials: 'include'
         });
-        
+
         if (userResponse.ok) {
           const userData = await userResponse.json();
           setUser(userData);
-          
+
           // If we have a user, fetch subscription data
           const subscriptionResponse = await fetch('/api/user/subscription', {
             credentials: 'include'
           });
-          
+
           if (subscriptionResponse.ok) {
             const subscriptionData = await subscriptionResponse.json();
             setSubscription(subscriptionData);
@@ -40,7 +40,7 @@ export default function TestSubscription() {
         setLoading(false);
       }
     };
-    
+
     fetchData();
   }, []);
 
@@ -55,21 +55,21 @@ export default function TestSubscription() {
   return (
     <div className="p-8">
       <h1 className="text-2xl font-bold mb-4">Subscription Test Page</h1>
-      
+
       <div className="mb-6">
         <h2 className="text-xl font-semibold mb-2">User Data</h2>
         <pre className="bg-gray-100 p-4 rounded">
           {JSON.stringify(user, null, 2)}
         </pre>
       </div>
-      
+
       <div className="mb-6">
         <h2 className="text-xl font-semibold mb-2">Subscription Data</h2>
         <pre className="bg-gray-100 p-4 rounded">
           {JSON.stringify(subscription, null, 2)}
         </pre>
       </div>
-      
+
       <div className="p-4 bg-yellow-100 rounded">
         <h3 className="font-medium">Current Status:</h3>
         <p className="mt-2">
@@ -79,6 +79,9 @@ export default function TestSubscription() {
           <>
             <p className="mt-1">
               Subscription type: <strong>{subscription?.type || 'N/A'}</strong>
+            </p>
+            <p className="mt-1">
+              Billing cycle: <strong>{subscription?.billingCycle || 'N/A'}</strong>
             </p>
             <p className="mt-1">
               Expires at: <strong>{subscription?.expiresAt ? new Date(subscription.expiresAt).toLocaleString() : 'N/A'}</strong>

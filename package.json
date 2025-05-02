@@ -5,7 +5,11 @@
   "license": "MIT",
   "scripts": {
     "dev": "tsx server/index.ts",
+    "dev:alt": "cross-env PORT=3003 tsx server/index.ts",
+    "dev:win": "set PORT=3003 && tsx server/index.ts",
     "start-dev": "echo \"\n============================================================\n🚀 Starting Daswos Application...\n============================================================\n\n🔗 Application will be available at: http://localhost:3000\n\n============================================================\n\" && npm run dev",
+    "start-dev:alt": "echo \"\n============================================================\n🚀 Starting Daswos Application on alternate port...\n============================================================\n\n🔗 Application will be available at: http://localhost:3003\n\n============================================================\n\" && npm run dev:alt",
+    "start-dev:win": "echo \"\n============================================================\n🚀 Starting Daswos Application on alternate port (Windows)...\n============================================================\n\n🔗 Application will be available at: http://localhost:3003\n\n============================================================\n\" && npm run dev:win",
     "build": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "start": "NODE_ENV=production node dist/index.js",
     "check": "tsc",

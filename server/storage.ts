@@ -366,10 +366,13 @@ export class DatabaseStorage implements IStorage {
     subscriptionType: string,
     billingCycle: string
   ): Promise<UserSubscription> {
+    console.log(`Creating Stripe subscription for user ${userId} with billing cycle ${billingCycle}`);
+
     // First, check if a subscription already exists for this user
     const existingSubscription = await this.getStripeSubscription(userId);
 
     if (existingSubscription) {
+      console.log(`Updating existing subscription for user ${userId}`);
       // Update the existing subscription
       const [subscription] = await db
         .update(userSubscriptions)
@@ -377,7 +380,7 @@ export class DatabaseStorage implements IStorage {
           stripeCustomerId,
           stripeSubscriptionId,
           subscriptionType,
-          billingCycle,
+          billingCycle, // Ensure billing cycle is updated
           status: 'active',
           updatedAt: new Date()
         })
@@ -387,6 +390,7 @@ export class DatabaseStorage implements IStorage {
       return subscription;
     }
 
+    console.log(`Creating new subscription for user ${userId} with billing cycle ${billingCycle}`);
     // Create a new subscription record
     const [subscription] = await db
       .insert(userSubscriptions)
@@ -395,7 +399,7 @@ export class DatabaseStorage implements IStorage {
         stripeCustomerId,
         stripeSubscriptionId,
         subscriptionType,
-        billingCycle,
+        billingCycle, // Ensure billing cycle is set
         status: 'active',
         currentPeriodStart: new Date(),
         // For monthly, add 1 month; for annual, add 1 year
@@ -504,7 +508,7 @@ export class DatabaseStorage implements IStorage {
     return true;
   }
 
-  async getUserSubscriptionDetails(userId: number): Promise<{hasSubscription: boolean, type?: string, expiresAt?: Date}> {
+  async getUserSubscriptionDetails(userId: number): Promise<{hasSubscription: boolean, type?: string, expiresAt?: Date, billingCycle?: string}> {
     const [user] = await db
       .select({
         hasSubscription: users.hasSubscription,
@@ -522,7 +526,8 @@ export class DatabaseStorage implements IStorage {
       return {
         hasSubscription: true,
         type: 'admin',
-        expiresAt: new Date('2099-12-31')
+        expiresAt: new Date('2099-12-31'),
+        billingCycle: 'annual'
       };
     }
 
@@ -536,10 +541,32 @@ export class DatabaseStorage implements IStorage {
       return { hasSubscription: false };
     }
 
+    // Get billing cycle from user_subscriptions table
+    let billingCycle: string | undefined;
+    if (user.hasSubscription) {
+      const [subscription] = await db
+        .select({
+          billingCycle: userSubscriptions.billingCycle
+        })
+        .from(userSubscriptions)
+        .where(eq(userSubscriptions.userId, userId));
+
+      if (subscription) {
+        billingCycle = subscription.billingCycle;
+      } else {
+        // Default to monthly if no billing cycle is found
+        billingCycle = 'monthly';
+
+        // Log this situation for debugging
+        console.log(`No billing cycle found for user ${userId} with subscription type ${user.subscriptionType}. Defaulting to monthly.`);
+      }
+    }
+
     return {
       hasSubscription: user.hasSubscription,
       type: user.subscriptionType || undefined,
-      expiresAt: user.subscriptionExpiresAt || undefined
+      expiresAt: user.subscriptionExpiresAt || undefined,
+      billingCycle: billingCycle
     };
   }
 

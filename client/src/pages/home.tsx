@@ -358,7 +358,7 @@ const Home: React.FC = () => {
               <AnimatedTrustText
                 sentences={[
                   "The first search engine that puts trust first.",
-                  "Helping you find what you need without worrying about scams."
+                  "Helping you find what you need with confidence."
                 ]}
                 duration={5000} // 5 seconds per sentence
               />

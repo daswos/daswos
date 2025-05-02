@@ -71,9 +71,9 @@ app.use((req, res, next) => {
     serveStatic(app);
   }
 
-  // Use the port from environment variable or default to 3002
+  // Use the port from environment variable or default to 3003
   // this serves both the API and the client.
-  const port = process.env.PORT ? parseInt(process.env.PORT) : 3002;
+  const port = process.env.PORT ? parseInt(process.env.PORT) : 3003;
   server.listen({
     port,
     host: "127.0.0.1",

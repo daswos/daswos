@@ -373,7 +373,7 @@ export default function ProfilePage() {
       action: "subscribe"
     });
 
-    // Direct API call to subscribe to Unlimited plan
+    // Direct API call to subscribe to Unlimited plan with billing cycle
     fetch('/api/user/subscription', {
       method: 'POST',
       headers: {
@@ -381,7 +381,7 @@ export default function ProfilePage() {
       },
       body: JSON.stringify({
         type: "unlimited",
-        billingCycle: billingCycle,
+        billingCycle: billingCycle, // This ensures the billing cycle is passed to the server
         action: "subscribe"
       })
     })
@@ -803,6 +803,14 @@ export default function ProfilePage() {
                        subscriptionDetails?.type || "Daswos Limited"} Plan
                     </p>
                   </div>
+                  {subscriptionDetails?.type !== 'limited' && (
+                    <div>
+                      <strong className="text-sm text-muted-foreground">Billing Cycle:</strong>
+                      <p>
+                        {subscriptionDetails?.billingCycle === 'annual' ? 'Annual (£50/year)' : 'Monthly (£5/month)'}
+                      </p>
+                    </div>
+                  )}
                   {subscriptionDetails?.expiresAt && (
                     <div>
                       <strong className="text-sm text-muted-foreground">Next Billing Date:</strong>
@@ -829,7 +837,7 @@ export default function ProfilePage() {
                         onClick={() => setBillingCycle("annual")}
                         className="w-full"
                       >
-                        Annual (Save 15%)
+                        Annual (Save 16%)
                       </Button>
                     </div>
                   </div>
@@ -862,7 +870,7 @@ export default function ProfilePage() {
                     >
                       <div className="flex flex-col items-center">
                         <span className="text-lg font-medium">Daswos Unlimited</span>
-                        <span className="text-sm">{billingCycle === "monthly" ? "£5/month" : "£51/year (Save 15%)"}</span>
+                        <span className="text-sm">{billingCycle === "monthly" ? "£5/month" : "£50/year (Save 16%)"}</span>
                       </div>
                     </Button>
                   </div>
@@ -899,7 +907,7 @@ export default function ProfilePage() {
                         onClick={() => setBillingCycle("annual")}
                         className="w-full"
                       >
-                        Annual (Save 15%)
+                        Annual (Save 16%)
                       </Button>
                     </div>
                   </div>
@@ -931,7 +939,7 @@ export default function ProfilePage() {
                     >
                       <div className="flex flex-col items-center">
                         <span className="text-lg font-medium">Daswos Unlimited</span>
-                        <span className="text-sm">{billingCycle === "monthly" ? "£5/month" : "£51/year (Save 15%)"}</span>
+                        <span className="text-sm">{billingCycle === "monthly" ? "£5/month" : "£50/year (Save 16%)"}</span>
                       </div>
                     </Button>
                   </div>
@@ -1750,10 +1758,19 @@ export default function ProfilePage() {
                 <div className="font-medium">
                   {subscriptionDetails?.type === 'limited' ? 'Free' :
                    subscriptionDetails?.type === 'unlimited' ?
-                     (subscriptionDetails?.billingCycle === 'annual' ? '£51/year (Save 15%)' : '£5/month') :
+                     (subscriptionDetails?.billingCycle === 'annual' ? '£50/year (Save 16%)' : '£5/month') :
                    subscriptionDetails?.type === 'individual' ? '£5/month (Legacy)' :
                    subscriptionDetails?.type === 'family' ? '£5/month (Legacy)' : 'Free'}
                 </div>
+
+                {subscriptionDetails?.type !== 'limited' && (
+                  <>
+                    <div>Billing Cycle:</div>
+                    <div className="font-medium">
+                      {subscriptionDetails?.billingCycle === 'annual' ? 'Annual' : 'Monthly'}
+                    </div>
+                  </>
+                )}
 
                 {subscriptionDetails?.expiresAt && (
                   <>
@@ -1782,9 +1799,18 @@ export default function ProfilePage() {
                 <div className="font-medium">
                   {planType === 'limited' ? 'Free' :
                    planType === 'unlimited' ?
-                     (billingCycle === "annual" ? '£51/year (Save 15%)' : '£5/month') :
+                     (billingCycle === "annual" ? '£50/year (Save 16%)' : '£5/month') :
                    'Free'}
                 </div>
+
+                {planType !== 'limited' && (
+                  <>
+                    <div>Billing Cycle:</div>
+                    <div className="font-medium">
+                      {billingCycle === 'annual' ? 'Annual' : 'Monthly'}
+                    </div>
+                  </>
+                )}
 
                 {subscriptionDetails?.expiresAt && (
                   <>

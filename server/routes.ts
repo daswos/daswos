@@ -649,14 +649,15 @@ app.post('/api/create-payment-intent', async (req, res) => {
         durationMonths
       );
 
-      // If we have Stripe subscription information, store it
+      // If we have Stripe subscription information, store it with billing cycle
       if (userData.stripeCustomerId && userData.stripeSubscriptionId && userData.type !== 'limited') {
+        console.log(`Creating Stripe subscription for user ${user.id} with billing cycle ${userData.billingCycle}`);
         await storage.createStripeSubscription(
           user.id,
           userData.stripeCustomerId,
           userData.stripeSubscriptionId,
           userData.type,
-          userData.billingCycle
+          userData.billingCycle // This ensures the billing cycle is stored in the user_subscriptions table
         );
       }
 
@@ -683,8 +684,128 @@ app.post('/api/create-payment-intent', async (req, res) => {
 
   // Process subscription payment and activate subscription
   app.post("/api/user/subscription", async (req, res) => {
-    if (!req.isAuthenticated()) {
+    // Check if this is a test mode request
+    const isTestMode = req.body.testMode === true;
+
+    // Check if this includes registration data
+    const hasRegistrationData = req.body.registrationData &&
+                               req.body.registrationData.username &&
+                               req.body.registrationData.email &&
+                               req.body.registrationData.password;
+
+    // For non-test mode requests without registration data, we require authentication
+    if (!isTestMode && !hasRegistrationData && !req.isAuthenticated()) {
       return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    // If registration data is provided, create a new user first
+    if (hasRegistrationData) {
+      try {
+        const { username, email, fullName, password } = req.body.registrationData;
+
+        // Check if username or email already exists
+        const existingUserByUsername = await storage.getUserByUsername(username);
+        if (existingUserByUsername) {
+          return res.status(400).json({ error: "Username already taken" });
+        }
+
+        const existingUserByEmail = await storage.getUserByEmail(email);
+        if (existingUserByEmail) {
+          return res.status(400).json({ error: "Email already in use" });
+        }
+
+        // Hash password
+        const hashedPassword = await hashPassword(password);
+
+        // Create user
+        const user = await storage.createUser({
+          username,
+          email,
+          fullName,
+          password: hashedPassword
+        });
+
+        // Set the user as authenticated
+        req.user = user;
+
+        // Log the user in
+        req.login(user, (err) => {
+          if (err) {
+            console.error("Error logging in new user:", err);
+            // Continue anyway since we have the user object
+          }
+        });
+
+        console.log(`Created and authenticated new user: ${username} (${user.id})`);
+      } catch (error) {
+        console.error('Error creating user during subscription:', error);
+        return res.status(500).json({ error: "Failed to create user account" });
+      }
+    }
+
+    // For test mode requests, we'll update the database with the subscription
+    if (isTestMode) {
+      console.log('Using test mode - updating user subscription in database');
+
+      if (!req.user) {
+        return res.status(401).json({ error: "User not authenticated after registration" });
+      }
+
+      try {
+        // Update the user's subscription in the database
+        const subscriptionType = req.body.type || "unlimited";
+
+        // Use duration in months instead of timestamp
+        const durationMonths = req.body.billingCycle === 'annual' ? 12 : 1;
+
+        // Update the user's subscription status
+        const updatedUser = await storage.updateUserSubscription(
+          req.user.id,
+          subscriptionType,
+          durationMonths
+        );
+
+        // Update the user object in the session to reflect the new subscription status
+        if (req.user) {
+          req.user.hasSubscription = true;
+          req.user.subscriptionType = subscriptionType;
+          req.user.subscriptionExpiresAt = new Date(Date.now() + durationMonths * 30 * 24 * 60 * 60 * 1000);
+        }
+
+        console.log(`Updated subscription for user ${req.user.id} to ${subscriptionType}`);
+
+        // Calculate expiration date for display purposes
+        const billingCycle = req.body.billingCycle || "monthly";
+        console.log(`Using billing cycle: ${billingCycle} for user ${req.user.id}`);
+        const expirationDate = new Date();
+        if (billingCycle === 'annual') {
+          expirationDate.setFullYear(expirationDate.getFullYear() + 1);
+        } else {
+          expirationDate.setMonth(expirationDate.getMonth() + 1);
+        }
+
+        // Return success response with user and subscription details
+        return res.json({
+          success: true,
+          message: "Subscription processed successfully",
+          user: {
+            id: req.user.id,
+            username: req.user.username,
+            email: req.user.email,
+            fullName: req.user.fullName,
+            hasSubscription: true,
+            subscriptionType: subscriptionType
+          },
+          subscription: {
+            type: subscriptionType,
+            billingCycle: billingCycle,
+            expiresAt: expirationDate
+          }
+        });
+      } catch (error) {
+        console.error('Error updating user subscription:', error);
+        return res.status(500).json({ error: "Failed to update subscription" });
+      }
     }
 
     // Check if subscription dev mode is enabled
@@ -719,16 +840,30 @@ app.post('/api/create-payment-intent', async (req, res) => {
         testMode
       } = schema.parse(req.body);
 
+      // Check if user already has an active subscription of the same type
+      // Only do this check for new subscriptions, not for switches or cancellations
+      if (action === "subscribe" && type === "unlimited") {
+        const currentSubscription = await storage.getUserSubscriptionDetails(req.user.id);
+
+        if (currentSubscription.hasSubscription && currentSubscription.type === "unlimited") {
+          return res.status(400).json({
+            success: false,
+            message: "You already have an active Daswos Unlimited subscription",
+            subscription: currentSubscription
+          });
+        }
+      }
+
       // If subscription dev mode is enabled or testMode flag is set, return success without processing payment
       if (subscriptionDevMode || testMode) {
         console.log(`Processing subscription in ${testMode ? 'test mode' : 'dev mode'}`);
-        
+
         // Set duration based on billing cycle
         const durationMonths = billingCycle === "annual" ? 12 : 1;
-        
+
         // Update the user's subscription in our database
         const user = await storage.updateUserSubscription(req.user.id, type, durationMonths);
-        
+
         // If we have Stripe subscription information, store it
         if (stripeCustomerId && stripeSubscriptionId && type !== 'limited') {
           await storage.createStripeSubscription(
@@ -768,6 +903,13 @@ app.post('/api/create-payment-intent', async (req, res) => {
         // Clear the user's subscription in our database
         const user = await storage.updateUserSubscription(req.user.id, "limited", 0);
 
+        // Update the user object in the session to reflect the new subscription status
+        if (req.user) {
+          req.user.hasSubscription = false;
+          req.user.subscriptionType = "limited";
+          req.user.subscriptionExpiresAt = null;
+        }
+
         return res.json({
           success: true,
           message: "Subscription canceled successfully",
@@ -778,6 +920,13 @@ app.post('/api/create-payment-intent', async (req, res) => {
       // For free tier, just update the user subscription without payment
       if (type === "limited") {
         const user = await storage.updateUserSubscription(req.user.id, type, 0);
+
+        // Update the user object in the session to reflect the new subscription status
+        if (req.user) {
+          req.user.hasSubscription = false;
+          req.user.subscriptionType = "limited";
+          req.user.subscriptionExpiresAt = null;
+        }
 
         return res.json({
           success: true,
@@ -814,6 +963,13 @@ app.post('/api/create-payment-intent', async (req, res) => {
 
       // Update the user's subscription in our database
       const user = await storage.updateUserSubscription(req.user.id, type, durationMonths);
+
+      // Update the user object in the session to reflect the new subscription status
+      if (req.user) {
+        req.user.hasSubscription = true;
+        req.user.subscriptionType = type;
+        req.user.subscriptionExpiresAt = new Date(Date.now() + durationMonths * 30 * 24 * 60 * 60 * 1000);
+      }
 
       const actionMessage = action === "switch" ? "changed" : "activated";
 
