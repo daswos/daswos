@@ -2,12 +2,13 @@
 
 ## PREREQUISITES
 
-- Node.js installed (v16 or higher)
+- Node.js installed (v20 or higher)
 - npm installed
+- Docker (optional, for containerized deployment)
 
 ## STARTUP INSTRUCTIONS
 
-### WINDOWS USERS
+### Local Development
 
 **Option 1: Using Batch File (Easiest)**
 ```
@@ -31,22 +32,28 @@ powershell -ExecutionPolicy Bypass -File start.ps1
 
 **Option 4: Using Command Prompt**
 ```
-cd DW-1
 npm run dev
 ```
 
-### MAC/LINUX USERS
+### Docker Deployment
 
+**Option 1: Build and Push Docker Image**
 ```
-cd DW-1
-npm run dev
+Double-click the docker-build-push.bat file
 ```
+This will build the Docker image and push it to Docker Hub using your info@daswos.com account.
+
+**Option 2: Run Docker Container**
+```
+Double-click the docker-run.bat file
+```
+This will start the application in a Docker container.
 
 ## ACCESS THE APPLICATION
 
 Once started, the application will be available at:
 ```
-http://localhost:3000
+http://localhost:5000
 ```
 
 ## TROUBLESHOOTING
@@ -64,6 +71,10 @@ If you encounter any issues:
 5. Database connection issues:
    - Make sure your .env file is properly configured with the database connection string
    - Try running `npm run db:push` to update the database schema
+6. Docker issues:
+   - Make sure Docker Desktop is installed and running
+   - Check if you're logged in to Docker Hub with `docker login`
+   - If you get permission errors, try running Docker Desktop as administrator
 
 ## COMMON COMMANDS
 
@@ -71,7 +82,7 @@ If you encounter any issues:
 # Install dependencies
 npm install
 
-# Start the application
+# Start the application (local development)
 npm run dev
 
 # Update database schema
@@ -82,4 +93,9 @@ npm run build
 
 # Start in production mode
 npm run start
+
+# Docker commands
+docker-compose up -d     # Start Docker containers
+docker-compose down      # Stop Docker containers
+docker-compose logs      # View Docker container logs
 ```

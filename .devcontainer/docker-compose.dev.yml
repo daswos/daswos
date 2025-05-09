@@ -12,13 +12,14 @@ services:
       - DATABASE_URL=${DATABASE_URL}
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
       - STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - SESSION_SECRET=${SESSION_SECRET}
     command: sleep infinity
     networks:
-      - trustsphere
+      - daswos-network
+    ports:
+      - "5000:5000"
     depends_on:
       db:
         condition: service_healthy
-
-networks:
-  trustsphere:
-    external: true
