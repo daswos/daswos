@@ -11,27 +11,27 @@ export interface NavigationItem {
   path: string;
   icon?: React.ComponentType<any>;
   isDefault?: boolean;
+  showInCollapsed?: boolean;
 }
 
 interface DasbarContextType {
   items: NavigationItem[];
-  visibleItems: NavigationItem[];
-  moreItems: NavigationItem[];
+  collapsedItems: NavigationItem[];
   addItem: (item: NavigationItem) => void;
   removeItem: (id: string) => void;
   moveItem: (id: string, direction: 'up' | 'down') => void;
   resetToDefaults: () => void;
   updateDasbarItems: (newItems: NavigationItem[]) => void;
-  maxVisibleItems: number;
-  setMaxVisibleItems: (count: number) => void;
+  toggleCollapsedVisibility: (id: string) => void;
   isLoading: boolean;
   savePreferences: () => Promise<void>;
 }
 
 const defaultItems: NavigationItem[] = [
-  { id: 'home', label: 'Home', path: '/', icon: Home, isDefault: true },
-  { id: 'daslist', label: 'das.list', path: '/d-list', icon: List, isDefault: true },
+  // Home is now fixed in the navigation bar and not part of customizable items
   { id: 'bulkbuy', label: 'BulkBuy', path: '/bulk-buy', icon: BulkBuyIcon },
+  { id: 'splitbuy', label: 'SplitBuy', path: '/split-buy', icon: SplitBuyIcon },
+  { id: 'daslist', label: 'das.list', path: '/d-list', icon: List },
   { id: 'jobs', label: 'Jobs', path: '/browse-jobs', icon: Briefcase },
   { id: 'ai-assistant', label: 'AI Assistant', path: '/ai-assistant', icon: Bot },
   { id: 'cart', label: 'Cart', path: '/cart', icon: ShoppingCart },
@@ -56,19 +56,14 @@ const iconMap: Record<string, React.ComponentType<any>> = {
 };
 
 export const availableItems: NavigationItem[] = [
-  { id: 'home', label: 'Home', path: '/', icon: Home, isDefault: true },
-  { id: 'daslist', label: 'das.list', path: '/d-list', icon: List, isDefault: true },
+  // Home is now fixed in the navigation bar and not part of customizable items
   { id: 'bulkbuy', label: 'BulkBuy', path: '/bulk-buy', icon: BulkBuyIcon },
+  { id: 'splitbuy', label: 'SplitBuy', path: '/split-buy', icon: SplitBuyIcon },
+  { id: 'daslist', label: 'das.list', path: '/d-list', icon: List },
   { id: 'jobs', label: 'Jobs', path: '/browse-jobs', icon: Briefcase },
   { id: 'ai-assistant', label: 'AI Assistant', path: '/ai-assistant', icon: Bot },
-  { id: 'profile', label: 'My Profile', path: '/profile', icon: User },
-  { id: 'split-buys', label: 'My Split Buys', path: '/split-buy-dashboard', icon: SplitBuyIcon },
-  { id: 'orders', label: 'My Orders', path: '/my-orders', icon: Package },
-  { id: 'list-item', label: 'List an Item', path: '/list-item', icon: Plus },
-  { id: 'listings', label: 'My Listings', path: '/my-listings', icon: FileText },
   { id: 'cart', label: 'Cart', path: '/cart', icon: ShoppingCart },
-  { id: 'daswos-coins', label: 'DasWos Coins', path: '/daswos-coins', icon: Coins },
-  { id: 'logout', label: 'Log out', path: '/auth/logout', icon: LogOut }
+  { id: 'daswos-coins', label: 'DasWos Coins', path: '/daswos-coins', icon: Coins }
 ];
 
 const DasbarContext = createContext<DasbarContextType | undefined>(undefined);
@@ -77,7 +72,6 @@ export const DasbarProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const { user } = useAuth();
   const { toast } = useToast();
   const [items, setItems] = useState<NavigationItem[]>(defaultItems);
-  const [maxVisibleItems, setMaxVisibleItems] = useState<number>(7); // Default to 7 visible items
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   // Load preferences from API on initial render and when user changes
@@ -99,7 +93,6 @@ export const DasbarProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         }));
 
         setItems(itemsWithIcons);
-        setMaxVisibleItems(data.maxVisibleItems);
       } catch (error) {
         console.error('Error loading dasbar preferences:', error);
         // Fall back to default items
@@ -117,7 +110,6 @@ export const DasbarProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (!user) {
       // Only save to localStorage for non-authenticated users
       localStorage.setItem('dasbar-items', JSON.stringify(items));
-      localStorage.setItem('dasbar-max-visible', maxVisibleItems.toString());
       return;
     }
 
@@ -134,8 +126,7 @@ export const DasbarProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          items: itemsForApi,
-          maxVisibleItems
+          items: itemsForApi
         })
       });
 
@@ -150,14 +141,12 @@ export const DasbarProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
-  // Split items into visible and more items
-  const visibleItems = items.slice(0, maxVisibleItems);
-  const moreItems = items.slice(maxVisibleItems);
+  // Get items that should be visible in collapsed mode
+  const collapsedItems = items.filter(item => item.showInCollapsed);
 
   // Helper function to save to localStorage only
   const saveToLocalStorage = (updatedItems: NavigationItem[]) => {
     localStorage.setItem('dasbar-items', JSON.stringify(updatedItems));
-    localStorage.setItem('dasbar-max-visible', maxVisibleItems.toString());
   };
 
   const addItem = (item: NavigationItem) => {
@@ -208,13 +197,20 @@ export const DasbarProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const resetToDefaults = () => {
-    setItems(defaultItems);
-    setMaxVisibleItems(7); // Reset to 7 visible items by default
+    // Make sure to clear any showInCollapsed properties
+    const resetItems = defaultItems.map(item => ({
+      ...item,
+      showInCollapsed: false // Reset all items to not show in collapsed mode
+    }));
+
+    setItems(resetItems);
 
     // Save to localStorage but don't trigger server save
     if (!user) {
-      saveToLocalStorage(defaultItems);
+      saveToLocalStorage(resetItems);
     }
+
+    console.log("Reset to defaults:", resetItems);
   };
 
   // Direct update function for the entire items array
@@ -227,18 +223,43 @@ export const DasbarProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
+  // Toggle whether an item should be visible in collapsed mode
+  const toggleCollapsedVisibility = (id: string) => {
+    const updatedItems = items.map(item => {
+      if (item.id === id) {
+        return {
+          ...item,
+          showInCollapsed: !item.showInCollapsed
+        };
+      }
+      return item;
+    });
+
+    setItems(updatedItems);
+
+    // Save to localStorage for non-authenticated users
+    if (!user) {
+      saveToLocalStorage(updatedItems);
+    } else {
+      // Save to server for authenticated users
+      savePreferences();
+    }
+
+    // Log for debugging
+    console.log(`Toggled collapsed visibility for ${id}:`,
+      updatedItems.find(item => item.id === id)?.showInCollapsed);
+  };
+
   return (
     <DasbarContext.Provider value={{
       items,
-      visibleItems,
-      moreItems,
+      collapsedItems,
       addItem,
       removeItem,
       moveItem,
       resetToDefaults,
       updateDasbarItems,
-      maxVisibleItems,
-      setMaxVisibleItems,
+      toggleCollapsedVisibility,
       isLoading,
       savePreferences
     }}>

@@ -317,8 +317,31 @@ export function setupAuth(app: Express) {
 
   // Modified logout endpoint
   app.post("/api/logout", async (req, res) => {
-    const { sessionToken } = req.body;
-    await storage.deactivateSession(sessionToken);
+    console.log("Logout requested");
+
+    // Get the session token from the request if available
+    const sessionToken = req.body?.sessionToken ||
+                         req.headers.authorization?.replace('Bearer ', '');
+
+    // If we have a session token, deactivate it in the database
+    if (sessionToken) {
+      try {
+        console.log("Deactivating user session token:", sessionToken);
+        await storage.deactivateSession(sessionToken);
+      } catch (error) {
+        console.error("Error deactivating session token:", error);
+      }
+    }
+
+    // If the user is authenticated, also deactivate all their sessions
+    if (req.isAuthenticated() && req.user?.id) {
+      try {
+        console.log("Deactivating all sessions for user ID:", req.user.id);
+        await storage.deactivateAllUserSessions(req.user.id);
+      } catch (error) {
+        console.error("Error deactivating all user sessions:", error);
+      }
+    }
 
     // Also destroy the session if it exists
     if (req.session) {
@@ -335,6 +358,9 @@ export function setupAuth(app: Express) {
         console.error("Error logging out:", err);
       }
     });
+
+    // Clear cookies
+    res.clearCookie('connect.sid', { path: '/' });
 
     res.sendStatus(200);
   });

@@ -2,7 +2,7 @@
 .dasbar {
   box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
   height: 60px; /* Slightly taller for better visibility */
-  transition: transform 0.3s ease;
+  transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1);
   /* Position fixed at the bottom with some space */
   position: fixed !important;
   bottom: 15px !important;
@@ -23,6 +23,123 @@
   backdrop-filter: blur(5px);
   /* Ensure it's above other content */
   z-index: 1000;
+  /* Add transform origin for better animation */
+  transform-origin: bottom left;
+  /* Ensure content is visible */
+  overflow: visible;
+}
+
+/* Collapsed state - move to the left side of the screen */
+.dasbar.collapsed {
+  position: fixed !important;
+  left: 15px !important;
+  right: auto !important;
+  bottom: 15px !important;
+  transform: none;
+  max-width: 40px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  padding: 0;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  background-color: #000000;
+  border: none;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+  overflow: visible;
+  z-index: 9999;
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+  transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+/* Hide text labels when collapsed except for the dasbar text */
+.dasbar.collapsed button span:not(.sr-only):not(.dasbar-text) {
+  display: none;
+}
+
+/* Hide all buttons except the collapse button when collapsed */
+.dasbar.collapsed .navigation-group-left,
+.dasbar.collapsed .navigation-group-dasbar {
+  display: none;
+}
+
+/* Center the collapse button when collapsed */
+.dasbar.collapsed .navigation-group-right {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  right: 0;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* Styling for the collapsed container */
+#dasbar-collapsed-container {
+  display: flex;
+  align-items: center;
+  gap: 15px; /* Increased gap for better vertical spacing */
+  flex-direction: column; /* Stack buttons vertically */
+  position: fixed;
+  left: 15px;
+  bottom: 15px;
+  z-index: 10000;
+}
+
+/* Hover effect for collapsed buttons */
+#dasbar-collapsed-container button:hover {
+  transform: scale(1.05);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.3);
+}
+
+#dasbar-collapsed-container button svg {
+  width: 20px;
+  height: 20px;
+  stroke-width: 2;
+}
+
+#dasbar-debug {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding: 0;
+  margin-top: 0;
+  position: relative; /* Enable positioning context for tooltip */
+}
+
+#dasbar-debug svg {
+  width: 24px;
+  height: 24px;
+}
+
+/* Hover effect for the DasWos logo button */
+#dasbar-debug:hover {
+  transform: scale(1.05);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.3);
+  transition: all 0.2s ease;
+}
+
+/* Adjust the collapse button in collapsed state */
+.dasbar.collapsed .collapse-button {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  padding: 0;
+  min-width: unset;
+}
+
+/* Style for the dasbar text in collapsed state */
+.dasbar-text {
+  font-size: 16px;
+  font-weight: 600;
+  color: white;
+  font-family: Arial, sans-serif;
 }
 
 /* Ensure the dasbar is always visible */
@@ -70,6 +187,37 @@
   height: 38px; /* Slightly smaller for tighter grouping */
 }
 
+/* Styling for dasbar items */
+.dasbar .dasbar-item {
+  margin: 0 2px;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  position: relative;
+  border-radius: 50%;
+  background-color: #f3f4f6;
+  color: #000000;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.dark .dasbar .dasbar-item {
+  background-color: #374151;
+  color: #e5e7eb;
+}
+
+.dasbar .dasbar-item:hover {
+  background-color: #e5e7eb;
+  transform: scale(1.05);
+}
+
+.dark .dasbar .dasbar-item:hover {
+  background-color: #4b5563;
+}
+
 .dasbar button:hover {
   background-color: rgba(0, 0, 0, 0.1);
 }
@@ -92,6 +240,7 @@
   height: 100%;
   position: relative;
   width: 100%;
+  overflow: visible;
 }
 
 /* Navigation groups styling */
@@ -105,16 +254,40 @@
   z-index: 50;
 }
 
+/* Dasbar items group - positioned between home button and collapse button */
+.dasbar .navigation-group-dasbar {
+  display: flex;
+  align-items: center;
+  position: absolute;
+  left: 155px; /* Position after the home button */
+  right: 110px; /* Leave space for the collapse button */
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 40;
+  overflow-x: auto;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+  gap: 10px; /* Spacing between dasbar buttons */
+  justify-content: flex-start;
+  padding-right: 10px;
+  height: 40px; /* Ensure height is set */
+}
+
+/* Hide scrollbar for Chrome, Safari and Opera */
+.dasbar .navigation-group-dasbar::-webkit-scrollbar {
+  display: none;
+}
+
 .dasbar .navigation-group-right {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: center;
   position: absolute;
   right: 10px;
   top: 50%;
   transform: translateY(-50%);
-  gap: 8px; /* Closer spacing between buttons */
-  max-width: 60%;
+  z-index: 50;
+  width: 90px; /* Fixed width to ensure consistent spacing */
 }
 
 /* Ensure icons are visible */
@@ -124,7 +297,7 @@
 }
 
 /* Hide text by default */
-.dasbar button span {
+.dasbar button span:not(.dasbar-text) {
   position: absolute;
   top: -25px;
   left: 50%;
@@ -138,10 +311,11 @@
   visibility: hidden;
   transition: opacity 0.2s ease, visibility 0.2s ease;
   white-space: nowrap;
+  z-index: 100;
 }
 
 /* Show text on hover */
-.dasbar button:hover span {
+.dasbar button:hover span:not(.dasbar-text) {
   opacity: 1;
   visibility: visible;
 }
@@ -165,9 +339,7 @@
 
 /* Navigation buttons styling (home and back) */
 .dasbar .nav-button {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -178,6 +350,15 @@
   box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
   transition: all 0.2s ease;
   z-index: 60;
+}
+
+/* Position for specific navigation buttons */
+.dasbar .back-button,
+.dasbar .forward-button,
+.dasbar .home-button {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
 }
 
 /* Back button styling */
@@ -226,6 +407,8 @@
   color: #374151; /* Dark gray text/icon */
 }
 
+/* Remove the collapse-button-left class as it's no longer needed */
+
 .dasbar .home-button:hover {
   background-color: #e5e7eb; /* Slightly darker gray on hover */
 }
@@ -269,15 +452,31 @@
     left: 5px;
   }
 
+  .dasbar .navigation-group-dasbar {
+    left: 145px; /* Adjust position after home button on mobile */
+    right: 90px; /* Leave space for collapse button on mobile */
+    gap: 6px; /* Tighter spacing on mobile */
+  }
+
   .dasbar .navigation-group-right {
     right: 5px;
-    gap: 4px; /* Even closer on mobile */
-    max-width: 65%;
+    width: 80px;
+  }
+
+  .dasbar .collapse-button {
+    min-width: 70px;
+    height: 36px;
   }
 
   .dasbar .nav-item {
     width: 34px; /* Smaller on mobile */
     height: 34px; /* Smaller on mobile */
+    margin: 0 1px; /* Tighter spacing on mobile */
+  }
+
+  .dasbar .dasbar-item {
+    width: 36px; /* Smaller on mobile */
+    height: 36px; /* Smaller on mobile */
     margin: 0 1px; /* Tighter spacing on mobile */
   }
 
@@ -288,22 +487,90 @@
   }
 }
 
-/* More button styling */
-.dasbar .more-button {
+/* Collapse button styling */
+.dasbar .collapse-button {
   position: relative;
   transition: all 0.2s ease;
+  background-color: #000000; /* Black background */
+  color: white; /* White text/icon */
+  border: none;
+  min-width: 80px;
+  height: 40px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 15px;
 }
 
-.dasbar .more-button svg {
-  color: #4b5563; /* gray-600 */
+.dasbar .collapse-button .dasbar-text {
+  position: static;
+  opacity: 1;
+  visibility: visible;
+  background-color: transparent;
+  padding: 0;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: lowercase;
+  white-space: nowrap;
 }
 
-.dark .dasbar .more-button svg {
-  color: #e5e7eb; /* gray-200 */
+.dark .dasbar .collapse-button {
+  color: white; /* Keep white in dark mode too */
 }
 
-.dasbar .more-button:hover svg {
-  transform: translateX(2px);
+.dasbar .collapse-button:hover {
+  background-color: #333333; /* Darker black on hover */
+}
+
+/* Hide the text label for the collapse button */
+.dasbar .collapse-button span:not(.dasbar-text) {
+  display: none;
+}
+
+/* Special styling for the collapsed button */
+.dasbar .collapsed-button {
+  background-color: #000000;
+  width: 100%;
+  height: 100%;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  position: relative;
+  cursor: pointer;
+  opacity: 1 !important;
+  visibility: visible !important;
+  border-radius: 50%;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+}
+
+/* Style for the dasbar logo in collapsed state */
+.dasbar .collapsed-button .dasbar-logo {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  background-color: #000000;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* Create the black circle with white D (kept for backward compatibility) */
+.dasbar .collapsed-button .dasbar-text {
+  color: white;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 700;
+  font-family: Arial, sans-serif;
 }
 
 /* Dark mode styling for nav items */

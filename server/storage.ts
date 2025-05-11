@@ -1,121 +1,276 @@
 import {
-  products, type Product, type InsertProduct,
-  searchQueries, type SearchQuery, type InsertSearchQuery,
+  products, type Product,
   users, type User, type InsertUser,
-  sellerVerifications, type SellerVerification, type InsertSellerVerification,
-  bulkBuyRequests, type BulkBuyRequest, type InsertBulkBuyRequest,
-  aiShopperRecommendations, type AiShopperRecommendation, type InsertAiShopperRecommendation,
-  userPaymentMethods, type UserPaymentMethod, type InsertUserPaymentMethod,
-  appSettings, type AppSettings, type InsertAppSettings,
-  informationContent, type InformationContent, type InsertInformationContent,
-  collaborativeSearches, type CollaborativeSearch, type InsertCollaborativeSearch,
-  collaborativeResources, type CollaborativeResource, type InsertCollaborativeResource,
-  collaborativeCollaborators, type CollaborativeCollaborator, type InsertCollaborativeCollaborator,
-  resourcePermissionRequests, type ResourcePermissionRequest, type InsertResourcePermissionRequest,
-  dasWosCoinsTransactions, type DasWosCoinsTransaction, type InsertDasWosCoinsTransaction,
-  cartItems, type CartItem, type InsertCartItem, type CartItemWithProduct,
-  splitBuys, type SplitBuy, type InsertSplitBuy,
-  splitBuyParticipants, type SplitBuyParticipant, type InsertSplitBuyParticipant,
-  orders, type Order, type InsertOrder,
-  orderItems, type OrderItem, type InsertOrderItem,
-  daswosAiChats, type DaswosAiChat, type InsertDaswosAiChat,
-  daswosAiChatMessages, type DaswosAiChatMessage, type InsertDaswosAiChatMessage,
-  daswosAiSources, type DaswosAiSource, type InsertDaswosAiSource,
-  familyInvitationCodes, type FamilyInvitationCode, type InsertFamilyInvitationCode
+  informationContent, type InformationContent
 } from "@shared/schema";
-import { userSubscriptions, type UserSubscription, type InsertUserSubscription } from "@shared/user-subscriptions";
 import connectPg from "connect-pg-simple";
 import session from "express-session";
 import memorystore from "memorystore";
 import { db } from "./db";
-import { eq, like, or, and, desc, isNotNull, ilike, sql, gte, lte, asc, not } from "drizzle-orm";
+import { eq, or, and, sql, ilike } from "drizzle-orm";
 import { log } from "./vite";
-import { HybridStorage } from './hybrid-storage';
-import { FallbackStorage } from './fallback-storage';
+// Simplified FallbackStorage class that implements the streamlined IStorage interface
+export class FallbackStorage implements IStorage {
+  public sessionStore: session.Store;
+  private users: User[] = [];
+  private products: Product[] = [];
+  private informationContent: InformationContent[] = [];
+
+  constructor() {
+    // Initialize a memory store for sessions
+    const MemoryStore = memorystore(session);
+    this.sessionStore = new MemoryStore({
+      checkPeriod: 86400000 // prune expired entries every 24h
+    });
+
+    // Initialize with sample data
+    this.initializeSampleData();
+  }
+
+  private initializeSampleData() {
+    // Initialize with empty arrays - we'll use the database for all data
+    this.users = [];
+    this.products = [];
+    this.informationContent = [];
+  }
+
+  // User operations
+  async getUser(id: number): Promise<User | undefined> {
+    return this.users.find(user => user.id === id);
+  }
+
+  async getUserById(id: number): Promise<User | undefined> {
+    return this.getUser(id);
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    return this.users.find(user => user.username.toLowerCase() === username.toLowerCase());
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    return this.users.find(user => user.email.toLowerCase() === email.toLowerCase());
+  }
+
+  async createUser(user: InsertUser): Promise<User> {
+    // Create a complete user object with all required fields
+    const newUser = {
+      ...user,
+      id: this.users.length + 1,
+      fullName: (user as any).fullName || 'New User',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      isSeller: false,
+      isAdmin: false,
+      avatar: '',
+      hasSubscription: false,
+      subscriptionType: 'limited',
+      subscriptionExpiresAt: null,
+      isFamilyOwner: false,
+      familyOwnerId: null,
+      isChild: false,
+      isVerified: true,
+      verificationToken: null,
+      resetPasswordToken: null,
+      resetPasswordExpires: null,
+      lastLoginAt: new Date(),
+      dasWosCoins: 0
+    } as unknown as User;
+
+    this.users.push(newUser);
+    return newUser;
+  }
+
+  // Product operations
+  async getProducts(sphere: string, query?: string): Promise<Product[]> {
+    // Use a type assertion to handle the custom 'sphere' property
+    let filteredProducts = this.products.filter(product => {
+      const productWithSphere = product as unknown as { sphere: string };
+      return productWithSphere.sphere === sphere || sphere === 'all';
+    });
+
+    if (query) {
+      const lowerQuery = query.toLowerCase();
+      filteredProducts = filteredProducts.filter(product =>
+        product.title.toLowerCase().includes(lowerQuery) ||
+        product.description.toLowerCase().includes(lowerQuery) ||
+        (product as any).categoryName?.toLowerCase().includes(lowerQuery)
+      );
+    }
+
+    return filteredProducts;
+  }
+
+  async getProductById(id: number): Promise<Product | undefined> {
+    return this.products.find(product => product.id === id);
+  }
+
+  // Information content operations
+  async getInformationContent(query?: string, category?: string): Promise<InformationContent[]> {
+    let filteredContent = [...this.informationContent];
+
+    if (query) {
+      const lowerQuery = query.toLowerCase();
+      filteredContent = filteredContent.filter(content =>
+        content.title.toLowerCase().includes(lowerQuery) ||
+        content.content.toLowerCase().includes(lowerQuery)
+      );
+    }
+
+    if (category) {
+      filteredContent = filteredContent.filter(content =>
+        content.category === category
+      );
+    }
+
+    return filteredContent;
+  }
+
+  async getInformationContentById(id: number): Promise<InformationContent | undefined> {
+    return this.informationContent.find(content => content.id === id);
+  }
+
+  // User session operations
+  async createUserSession(session: any): Promise<any> {
+    return {
+      id: 1,
+      userId: session.userId,
+      sessionToken: session.sessionToken,
+      deviceInfo: session.deviceInfo,
+      createdAt: new Date(),
+      expiresAt: session.expiresAt,
+      isActive: true
+    };
+  }
+
+  async getUserSessions(userId: number | null): Promise<any[]> {
+    return [];
+  }
+
+  async deactivateSession(sessionToken: string): Promise<boolean> {
+    // In fallback storage, just return success
+    return true;
+  }
+
+  async deactivateAllUserSessions(userId: number): Promise<boolean> {
+    // In fallback storage, just return success
+    return true;
+  }
+
+  // App settings operations
+  async getAppSettings(key: string): Promise<any> {
+    return {};
+  }
+
+  async setAppSettings(key: string, value: any): Promise<boolean> {
+    return true;
+  }
+
+  async getAllAppSettings(): Promise<{[key: string]: any}> {
+    return {};
+  }
+
+  // User subscription operations
+  async updateUserSubscription(userId: number, subscriptionType: string, durationMonths: number): Promise<User> {
+    const user = await this.getUser(userId);
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    const updatedUser = { ...user } as any;
+    updatedUser.hasSubscription = true;
+    updatedUser.subscriptionType = subscriptionType;
+
+    if (durationMonths > 0) {
+      const expiresAt = new Date();
+      expiresAt.setMonth(expiresAt.getMonth() + durationMonths);
+      updatedUser.subscriptionExpiresAt = expiresAt;
+    } else {
+      updatedUser.subscriptionExpiresAt = null;
+    }
+
+    // Update the user in the users array
+    const userIndex = this.users.findIndex(u => u.id === userId);
+    if (userIndex !== -1) {
+      this.users[userIndex] = updatedUser as User;
+    }
+
+    return updatedUser;
+  }
+
+  async checkUserHasSubscription(userId: number): Promise<boolean> {
+    const user = await this.getUser(userId);
+    return user?.hasSubscription || false;
+  }
+
+  async getUserSubscriptionDetails(userId: number): Promise<{hasSubscription: boolean, type?: string, expiresAt?: Date}> {
+    const user = await this.getUser(userId);
+    if (!user) {
+      return { hasSubscription: false };
+    }
+
+    return {
+      hasSubscription: user.hasSubscription || false,
+      type: user.subscriptionType,
+      expiresAt: user.subscriptionExpiresAt
+    };
+  }
+
+  // AI operations
+  async generateAiRecommendations(
+    userId: number,
+    searchQuery?: string,
+    isBulkBuy?: boolean,
+    searchHistory?: string[],
+    shoppingList?: string
+  ): Promise<{ success: boolean; message: string; }> {
+    // In the fallback storage, we just return a success message
+    return {
+      success: true,
+      message: 'AI recommendations generated successfully (fallback mode)'
+    };
+  }
+}
 
 // Create an instance of the fallback storage to use when needed
 export const memoryStorage = new FallbackStorage();
 
-// Define the storage interface
+// Define the streamlined storage interface with essential methods
 export interface IStorage {
+  // Session store
+  sessionStore: session.Store;
+
   // User related operations
   getUser(id: number): Promise<User | undefined>;
   getUserById(id: number): Promise<User | undefined>; // Alias for getUser for better readability
   getUserByUsername(username: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+
+  // User session operations
+  createUserSession(session: any): Promise<any>;
+  getUserSessions(userId: number | null): Promise<any[]>;
+  deactivateSession(sessionToken: string): Promise<boolean>;
+  deactivateAllUserSessions(userId: number): Promise<boolean>;
+
+  // App settings operations
+  getAppSettings(key: string): Promise<any>;
+  setAppSettings(key: string, value: any): Promise<boolean>;
+  getAllAppSettings(): Promise<{[key: string]: any}>;
+
+  // User subscription operations
   updateUserSubscription(userId: number, subscriptionType: string, durationMonths: number): Promise<User>;
   checkUserHasSubscription(userId: number): Promise<boolean>;
   getUserSubscriptionDetails(userId: number): Promise<{hasSubscription: boolean, type?: string, expiresAt?: Date}>;
-  updateUserSellerStatus(userId: number, isSeller: boolean): Promise<boolean>;
-
-  // Stripe subscription operations
-  createStripeSubscription(userId: number, stripeCustomerId: string, stripeSubscriptionId: string, subscriptionType: string, billingCycle: string): Promise<UserSubscription>;
-  updateStripeSubscription(userId: number, stripeSubscriptionId: string, status: string): Promise<UserSubscription | undefined>;
-  getStripeSubscription(userId: number): Promise<UserSubscription | undefined>;
-
-  // Family account operations
-  createFamilyInvitationCode(ownerId: number, email?: string, expiresInDays?: number): Promise<FamilyInvitationCode>;
-  getFamilyInvitationByCode(code: string): Promise<FamilyInvitationCode | undefined>;
-  getFamilyInvitationsByOwner(ownerId: number): Promise<FamilyInvitationCode[]>;
-  markFamilyInvitationAsUsed(code: string, userId: number): Promise<boolean>;
-  getFamilyMembers(ownerId: number): Promise<User[]>;
-  updateFamilyMemberSettings(ownerId: number, memberId: number, settings: any): Promise<boolean>;
-
-  // Family account operations
-  addFamilyMember(ownerUserId: number, email: string): Promise<{ success: boolean, message: string }>;
-  removeFamilyMember(memberUserId: number): Promise<boolean>;
-  getFamilyMembers(ownerUserId: number): Promise<User[]>;
-  isFamilyOwner(userId: number): Promise<boolean>;
-  createChildAccount(ownerUserId: number, childName: string): Promise<{ success: boolean, message: string, account?: { username: string, password: string } }>;
-  updateChildAccountPassword(childUserId: number, newPassword: string): Promise<boolean>;
-
-  // SuperSafe mode operations
-  getSuperSafeStatus(userId: number): Promise<{enabled: boolean, settings: any}>;
-  updateSuperSafeStatus(userId: number, enabled: boolean, settings?: any): Promise<boolean>;
-  updateFamilyMemberSuperSafeStatus(ownerUserId: number, memberUserId: number, enabled: boolean, settings?: any): Promise<boolean>;
-
-  // SafeSphere mode operations
-  getSafeSphereStatus(userId: number): Promise<boolean>;
-  updateSafeSphereStatus(userId: number, active: boolean): Promise<boolean>;
 
   // Product related operations
   getProducts(sphere: string, query?: string): Promise<Product[]>;
   getProductById(id: number): Promise<Product | undefined>;
-  createProduct(product: InsertProduct): Promise<Product>;
-  getProductsBySellerId(sellerId: number): Promise<Product[]>;
 
-  // Search related operations
-  saveSearchQuery(searchQuery: InsertSearchQuery): Promise<SearchQuery>;
-  getRecentSearches(limit: number): Promise<SearchQuery[]>;
+  // Information content operations
+  getInformationContent(query?: string, category?: string): Promise<InformationContent[]>;
+  getInformationContentById(id: number): Promise<InformationContent | undefined>;
 
-  // Seller verification operations
-  createSellerVerification(verification: InsertSellerVerification): Promise<SellerVerification>;
-  getSellerVerificationsByUserId(userId: number): Promise<SellerVerification[]>;
-  updateSellerVerificationStatus(id: number, status: string, comments?: string): Promise<SellerVerification>;
-
-  // New seller methods
-  findSellerByUserId(userId: number): Promise<any | undefined>;
-  getSellerById(sellerId: number): Promise<any | undefined>;
-  getPendingSellerVerifications(): Promise<any[]>;
-  getAllSellerVerifications(): Promise<any[]>;
-  createSeller(sellerData: any): Promise<any>;
-  updateSeller(sellerId: number, data: any): Promise<any>;
-
-  // Bulk Buy Agent operations
-  createBulkBuyRequest(request: InsertBulkBuyRequest): Promise<BulkBuyRequest>;
-  getBulkBuyRequestsByUserId(userId: number): Promise<BulkBuyRequest[]>;
-  getBulkBuyRequestById(id: number): Promise<BulkBuyRequest | undefined>;
-  updateBulkBuyRequestStatus(id: number, status: string, agentId?: number): Promise<BulkBuyRequest>;
-
-  // AI Shopper operations
-  getAiShopperStatus(userId: number): Promise<{enabled: boolean, settings: any}>;
-  updateAiShopperStatus(userId: number, enabled: boolean, settings?: any): Promise<boolean>;
-  createAiShopperRecommendation(recommendation: InsertAiShopperRecommendation): Promise<AiShopperRecommendation>;
-  getAiShopperRecommendationsByUserId(userId: number): Promise<AiShopperRecommendation[]>;
-  getRecommendationById(userId: number | null, recommendationId: number): Promise<AiShopperRecommendation | null>;
-  updateAiShopperRecommendationStatus(id: number, status: string, reason?: string, removeFromList?: boolean): Promise<AiShopperRecommendation>;
-  clearAiShopperRecommendations(userId: number): Promise<void>;
+  // AI operations
   generateAiRecommendations(
     userId: number,
     searchQuery?: string,
@@ -123,119 +278,6 @@ export interface IStorage {
     searchHistory?: string[],
     shoppingList?: string
   ): Promise<{ success: boolean; message: string; }>;
-  processAutoPurchase(recommendationId: number): Promise<{ success: boolean; message: string; }>;
-
-  // Split Bulk Buy operations
-  createSplitBuy(splitBuy: InsertSplitBuy): Promise<SplitBuy>;
-  getSplitBuyById(id: number): Promise<SplitBuy | undefined>;
-  getSplitBuysByProductId(productId: number): Promise<SplitBuy[]>;
-  getSplitBuysByUserId(userId: number): Promise<SplitBuy[]>;
-  updateSplitBuyStatus(id: number, status: string): Promise<SplitBuy>;
-  addSplitBuyParticipant(participant: InsertSplitBuyParticipant): Promise<SplitBuyParticipant>;
-  getSplitBuyParticipants(splitBuyId: number): Promise<SplitBuyParticipant[]>;
-  updateSplitBuyParticipantStatus(id: number, status: string): Promise<SplitBuyParticipant>;
-
-  // Order operations
-  createOrder(order: InsertOrder): Promise<Order>;
-  getOrderById(id: number): Promise<Order | undefined>;
-  getOrdersByUserId(userId: number): Promise<Order[]>;
-  updateOrderStatus(id: number, status: string): Promise<Order>;
-  addOrderItem(orderItem: InsertOrderItem): Promise<OrderItem>;
-  getOrderItemsByOrderId(orderId: number): Promise<OrderItem[]>;
-
-  // DasWos Coins operations
-  getUserDasWosCoins(userId: number): Promise<number>;
-  addDasWosCoins(userId: number, amount: number, type: string, description: string, metadata?: any): Promise<boolean>;
-  spendDasWosCoins(userId: number, amount: number, description: string, metadata?: any): Promise<boolean>;
-  getDasWosCoinsTransactions(userId: number, limit?: number): Promise<DasWosCoinsTransaction[]>;
-
-  // Daswos AI Chat operations
-  createDaswosAiChat(chat: InsertDaswosAiChat): Promise<DaswosAiChat>;
-  getUserChats(userId: number | null): Promise<DaswosAiChat[]>;
-  getChatById(chatId: number): Promise<DaswosAiChat | undefined>;
-  updateChatTitle(chatId: number, title: string): Promise<DaswosAiChat>;
-  archiveChat(chatId: number): Promise<DaswosAiChat>;
-
-  // Daswos AI Chat Messages operations
-  addChatMessage(message: InsertDaswosAiChatMessage): Promise<DaswosAiChatMessage>;
-  getChatMessages(chatId: number): Promise<DaswosAiChatMessage[]>;
-  getRecentChatMessage(chatId: number): Promise<DaswosAiChatMessage | undefined>;
-
-  // Daswos AI Sources operations
-  addMessageSource(source: InsertDaswosAiSource): Promise<DaswosAiSource>;
-  getMessageSources(messageId: number): Promise<DaswosAiSource[]>;
-
-  // Payment method operations
-  getUserPaymentMethods(userId: number): Promise<UserPaymentMethod[]>;
-  getDefaultPaymentMethod(userId: number): Promise<UserPaymentMethod | undefined>;
-  addUserPaymentMethod(paymentMethod: InsertUserPaymentMethod): Promise<UserPaymentMethod>;
-  setDefaultPaymentMethod(paymentMethodId: number, userId: number): Promise<boolean>;
-  deletePaymentMethod(paymentMethodId: number): Promise<boolean>;
-
-  // Session store
-  sessionStore: session.Store;
-
-  // App settings operations
-  getAppSettings(key: string): Promise<any>;
-  setAppSettings(key: string, value: any): Promise<boolean>;
-  getAllAppSettings(): Promise<{[key: string]: any}>;
-
-  // Information content operations
-  getInformationContent(query?: string, category?: string): Promise<InformationContent[]>;
-  getInformationContentById(id: number): Promise<InformationContent | undefined>;
-  createInformationContent(content: InsertInformationContent): Promise<InformationContent>;
-  getInformationContentByCategory(category: string): Promise<InformationContent[]>;
-
-  // Collaborative Search operations
-  createCollaborativeSearch(search: InsertCollaborativeSearch): Promise<CollaborativeSearch>;
-  getCollaborativeSearchById(id: number): Promise<CollaborativeSearch | undefined>;
-  getUserCollaborativeSearches(userId: number): Promise<CollaborativeSearch[]>;
-  updateCollaborativeSearch(id: number, data: Partial<InsertCollaborativeSearch>): Promise<CollaborativeSearch>;
-  searchCollaborativeSearches(query: string, topic?: string): Promise<CollaborativeSearch[]>;
-
-  // Collaborative Resources operations
-  addResourceToCollaborativeSearch(resource: InsertCollaborativeResource): Promise<CollaborativeResource>;
-  getResourceById(id: number): Promise<CollaborativeResource | undefined>;
-  getResourcesBySearchId(searchId: number): Promise<CollaborativeResource[]>;
-  updateResource(id: number, data: Partial<InsertCollaborativeResource>): Promise<CollaborativeResource>;
-
-  // Collaborator operations
-  addCollaborator(collaborator: InsertCollaborativeCollaborator): Promise<CollaborativeCollaborator>;
-  getSearchCollaborators(searchId: number): Promise<CollaborativeCollaborator[]>;
-  getUserCollaborations(userId: number): Promise<CollaborativeCollaborator[]>;
-  removeCollaborator(searchId: number, userId: number): Promise<boolean>;
-
-  // Resource Permission operations
-  requestResourcePermission(request: InsertResourcePermissionRequest): Promise<ResourcePermissionRequest>;
-  getResourcePermissionRequests(resourceId: number): Promise<ResourcePermissionRequest[]>;
-  getUserPermissionRequests(userId: number): Promise<ResourcePermissionRequest[]>;
-  updatePermissionRequestStatus(requestId: number, status: string): Promise<ResourcePermissionRequest>;
-
-  // Shopping Cart operations
-  getUserCartItems(userId: number): Promise<CartItemWithProduct[]>;
-  addCartItem(item: InsertCartItem): Promise<CartItem>;
-  updateCartItemQuantity(itemId: number, quantity: number): Promise<CartItem>;
-  removeCartItem(itemId: number): Promise<void>;
-  clearUserCart(userId: number): Promise<void>;
-  addAiRecommendationToCart(userId: number, recommendationId: number): Promise<CartItem>;
-
-  // Daswos AI Chat operations
-  createDaswosAiChat(chatData: InsertDaswosAiChat): Promise<DaswosAiChat>;
-  getUserChats(userId: number | null): Promise<DaswosAiChat[]>;
-  getChatById(chatId: number): Promise<DaswosAiChat | undefined>;
-  updateChatTitle(chatId: number, title: string): Promise<DaswosAiChat>;
-  archiveChat(chatId: number): Promise<DaswosAiChat>;
-  getChatMessages(chatId: number): Promise<DaswosAiChatMessage[]>;
-  addChatMessage(messageData: InsertDaswosAiChatMessage): Promise<DaswosAiChatMessage>;
-  getRecentChatMessage(chatId: number): Promise<DaswosAiChatMessage | undefined>;
-  addMessageSource(sourceData: InsertDaswosAiSource): Promise<DaswosAiSource>;
-  getMessageSources(messageId: number): Promise<DaswosAiSource[]>;
-
-  // User Settings operations
-  getDasbarSettings(userId: number): Promise<any>;
-  updateDasbarSettings(settings: any): Promise<any>;
-  getUserDasbarPreferences(userId: number): Promise<any>;
-  saveUserDasbarPreferences(userId: number, items: any[], maxVisibleItems: number): Promise<any>;
 }
 
 // Database storage implementation
@@ -1976,7 +2018,7 @@ export class DatabaseStorage implements IStorage {
     return preferences || null;
   }
 
-  async saveUserDasbarPreferences(userId: number, items: any[], maxVisibleItems: number): Promise<UserDasbarPreferences> {
+  async saveUserDasbarPreferences(userId: number, items: any[]): Promise<UserDasbarPreferences> {
     // Check if preferences already exist for this user
     const existingPreferences = await this.getUserDasbarPreferences(userId);
 
@@ -1986,7 +2028,6 @@ export class DatabaseStorage implements IStorage {
         .update(userDasbarPreferences)
         .set({
           items,
-          maxVisibleItems,
           updatedAt: new Date()
         })
         .where(eq(userDasbarPreferences.userId, userId))
@@ -2000,7 +2041,6 @@ export class DatabaseStorage implements IStorage {
         .values({
           userId,
           items,
-          maxVisibleItems,
           createdAt: new Date()
         })
         .returning();
@@ -3254,8 +3294,210 @@ export class DatabaseStorage implements IStorage {
 const databaseStorage = new DatabaseStorage();
 const memoryStorageInstance = memoryStorage;
 
-// Create a hybrid storage instance using PostgreSQL for production
-// Only falling back to memory in development mode
+// Streamlined HybridStorage class that implements our simplified IStorage interface
+export class HybridStorage implements IStorage {
+  private primaryStorage: DatabaseStorage;
+  private fallbackStorage: FallbackStorage;
+
+  constructor() {
+    this.primaryStorage = new DatabaseStorage();
+    this.fallbackStorage = memoryStorage;
+  }
+
+  // Proxy the sessionStore property
+  get sessionStore() {
+    return this.primaryStorage.sessionStore;
+  }
+
+  // Helper method to execute a storage operation with fallback
+  private async executeWithFallback<T>(
+    operation: string,
+    primaryFn: () => Promise<T>,
+    fallbackFn: () => Promise<T>
+  ): Promise<T> {
+    try {
+      return await primaryFn();
+    } catch (error) {
+      console.log(`Error in ${operation}, using fallback storage: ${error}`);
+      return await fallbackFn();
+    }
+  }
+
+  // User operations
+  async getUser(id: number): Promise<User | undefined> {
+    return this.executeWithFallback(
+      'getUser',
+      () => this.primaryStorage.getUser(id),
+      () => this.fallbackStorage.getUser(id)
+    );
+  }
+
+  async getUserById(id: number): Promise<User | undefined> {
+    return this.executeWithFallback(
+      'getUserById',
+      () => this.primaryStorage.getUserById(id),
+      () => this.fallbackStorage.getUserById(id)
+    );
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    return this.executeWithFallback(
+      'getUserByUsername',
+      () => this.primaryStorage.getUserByUsername(username),
+      () => this.fallbackStorage.getUserByUsername(username)
+    );
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    return this.executeWithFallback(
+      'getUserByEmail',
+      () => this.primaryStorage.getUserByEmail(email),
+      () => this.fallbackStorage.getUserByEmail(email)
+    );
+  }
+
+  async createUser(user: InsertUser): Promise<User> {
+    return this.executeWithFallback(
+      'createUser',
+      () => this.primaryStorage.createUser(user),
+      () => this.fallbackStorage.createUser(user)
+    );
+  }
+
+  // Product operations
+  async getProducts(sphere: string, query?: string): Promise<Product[]> {
+    return this.executeWithFallback(
+      'getProducts',
+      () => this.primaryStorage.getProducts(sphere, query),
+      () => this.fallbackStorage.getProducts(sphere, query)
+    );
+  }
+
+  async getProductById(id: number): Promise<Product | undefined> {
+    return this.executeWithFallback(
+      'getProductById',
+      () => this.primaryStorage.getProductById(id),
+      () => this.fallbackStorage.getProductById(id)
+    );
+  }
+
+  // Information content operations
+  async getInformationContent(query?: string, category?: string): Promise<InformationContent[]> {
+    return this.executeWithFallback(
+      'getInformationContent',
+      () => this.primaryStorage.getInformationContent(query, category),
+      () => this.fallbackStorage.getInformationContent(query, category)
+    );
+  }
+
+  async getInformationContentById(id: number): Promise<InformationContent | undefined> {
+    return this.executeWithFallback(
+      'getInformationContentById',
+      () => this.primaryStorage.getInformationContentById(id),
+      () => this.fallbackStorage.getInformationContentById(id)
+    );
+  }
+
+  // User session operations
+  async createUserSession(session: any): Promise<any> {
+    return this.executeWithFallback(
+      'createUserSession',
+      () => this.primaryStorage.createUserSession(session),
+      () => this.fallbackStorage.createUserSession(session)
+    );
+  }
+
+  async getUserSessions(userId: number | null): Promise<any[]> {
+    return this.executeWithFallback(
+      'getUserSessions',
+      () => this.primaryStorage.getUserSessions(userId),
+      () => this.fallbackStorage.getUserSessions(userId)
+    );
+  }
+
+  async deactivateSession(sessionToken: string): Promise<boolean> {
+    return this.executeWithFallback(
+      'deactivateSession',
+      () => this.primaryStorage.deactivateSession(sessionToken),
+      () => this.fallbackStorage.deactivateSession(sessionToken)
+    );
+  }
+
+  async deactivateAllUserSessions(userId: number): Promise<boolean> {
+    return this.executeWithFallback(
+      'deactivateAllUserSessions',
+      () => this.primaryStorage.deactivateAllUserSessions(userId),
+      () => this.fallbackStorage.deactivateAllUserSessions(userId)
+    );
+  }
+
+  // App settings operations
+  async getAppSettings(key: string): Promise<any> {
+    return this.executeWithFallback(
+      'getAppSettings',
+      () => this.primaryStorage.getAppSettings(key),
+      () => this.fallbackStorage.getAppSettings(key)
+    );
+  }
+
+  async setAppSettings(key: string, value: any): Promise<boolean> {
+    return this.executeWithFallback(
+      'setAppSettings',
+      () => this.primaryStorage.setAppSettings(key, value),
+      () => this.fallbackStorage.setAppSettings(key, value)
+    );
+  }
+
+  async getAllAppSettings(): Promise<{[key: string]: any}> {
+    return this.executeWithFallback(
+      'getAllAppSettings',
+      () => this.primaryStorage.getAllAppSettings(),
+      () => this.fallbackStorage.getAllAppSettings()
+    );
+  }
+
+  // User subscription operations
+  async updateUserSubscription(userId: number, subscriptionType: string, durationMonths: number): Promise<User> {
+    return this.executeWithFallback(
+      'updateUserSubscription',
+      () => this.primaryStorage.updateUserSubscription(userId, subscriptionType, durationMonths),
+      () => this.fallbackStorage.updateUserSubscription(userId, subscriptionType, durationMonths)
+    );
+  }
+
+  async checkUserHasSubscription(userId: number): Promise<boolean> {
+    return this.executeWithFallback(
+      'checkUserHasSubscription',
+      () => this.primaryStorage.checkUserHasSubscription(userId),
+      () => this.fallbackStorage.checkUserHasSubscription(userId)
+    );
+  }
+
+  async getUserSubscriptionDetails(userId: number): Promise<{hasSubscription: boolean, type?: string, expiresAt?: Date}> {
+    return this.executeWithFallback(
+      'getUserSubscriptionDetails',
+      () => this.primaryStorage.getUserSubscriptionDetails(userId),
+      () => this.fallbackStorage.getUserSubscriptionDetails(userId)
+    );
+  }
+
+  // AI operations
+  async generateAiRecommendations(
+    userId: number,
+    searchQuery?: string,
+    isBulkBuy?: boolean,
+    searchHistory?: string[],
+    shoppingList?: string
+  ): Promise<{ success: boolean; message: string; }> {
+    return this.executeWithFallback(
+      'generateAiRecommendations',
+      () => this.primaryStorage.generateAiRecommendations(userId, searchQuery, isBulkBuy, searchHistory, shoppingList),
+      () => this.fallbackStorage.generateAiRecommendations(userId, searchQuery, isBulkBuy, searchHistory, shoppingList)
+    );
+  }
+}
+
+// Create a storage instance
 export const storage = new HybridStorage();
 
 // Log storage configuration

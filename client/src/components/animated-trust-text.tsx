@@ -41,8 +41,8 @@ const AnimatedTrustText: React.FC<AnimatedTrustTextProps> = ({
   }
 
   return (
-    <div className="text-center">
-      <p className={`text-sm md:text-base font-medium mb-2 animated-trust-text ${isFadingOut ? 'fade-out' : ''}`}>
+    <div className="text-center w-full mx-auto">
+      <p className={`text-sm md:text-base font-medium mb-2 animated-trust-text ${isFadingOut ? 'fade-out' : ''} mx-auto`}>
         {sentences[currentSentenceIndex]}
       </p>
     </div>

@@ -4,7 +4,7 @@ import {
   LogOutIcon, ShoppingBag, UserIcon, ShieldCheck, Search,
   Split, ShoppingCart, Plus, Minus, Trash2, Info, MessageSquare,
   ChevronDown, ChevronRight, Store, Sun, Moon, Wallet, Package,
-  Loader2, Settings, Cog
+  Loader2, Settings, Cog, Home
 } from 'lucide-react';
 // Theme provider removed as we're using a fixed logo
 import { useAuth } from '@/hooks/use-auth';
@@ -39,8 +39,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
 
-// Import menu component
-import MenuButton from '@/components/menu-button';
+// Menu button import removed
 
 // Quick Purchase Button Component
 interface QuickPurchaseButtonProps {
@@ -357,16 +356,16 @@ const Header = () => {
   return (
     <header className="w-full sticky top-0 bg-gray-200 z-20 text-black">
       <div className="container mx-auto px-4 py-2 flex items-center justify-between">
-        {/* Menu Button as Home Button */}
+        {/* Home Button */}
         <div className="flex items-center">
-          {/* Logo/Menu Button - Acts as Home Button */}
-          <div
-            className="cursor-pointer"
+          <button
             onClick={() => handleNavigation('/')}
+            className="bg-white px-2 py-1 border border-gray-300 text-black flex items-center text-xs"
             title="Home"
           >
-            <MenuButton height={30} />
-          </div>
+            <Home className="h-4 w-4 mr-1" />
+            <span>Home</span>
+          </button>
         </div>
 
         {/* Center section - empty now that logo is moved to left */}

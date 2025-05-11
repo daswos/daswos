@@ -1,26 +1,37 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'wouter';
 import AnimatedTrustText from '@/components/animated-trust-text';
-import { Search, ShieldCheck, ShoppingCart, Bot, Check, X, Loader2, Volume2, Info, UserIcon, Store as StoreIcon, Sun, Moon } from 'lucide-react';
+import { Check, X, Loader2, Volume2, Sun, Moon, Search, Plus, Image } from 'lucide-react';
 import { useTheme } from '@/providers/theme-provider';
 import DasWosLogo from '@/components/daswos-logo';
 import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import SearchBar from '@/components/search-bar';
 import FeatureAwareSphereToggle from '@/components/feature-aware-sphere-toggle';
-import AutoShopToggle from '@/components/autoshop-toggle';
 import FeatureAwareAiSearchToggle from '@/components/feature-aware-ai-search-toggle';
 import FeatureAwareSuperSafeToggle from '@/components/feature-aware-super-safe-toggle';
 import RobotIcon from '@/components/robot-icon';
+import PhotoSelector from '@/components/photo-selector';
+import { useAuth } from '@/hooks/use-auth';
+import { useToast } from '@/hooks/use-toast';
 
 const Home: React.FC = () => {
   const [, setLocation] = useLocation();
   const [showSearch, setShowSearch] = useState(true);
   const { theme, toggleTheme } = useTheme();
+  const { user } = useAuth();
+  const { toast } = useToast();
+
+  // Photo selector state
+  const [isPhotoSelectorOpen, setIsPhotoSelectorOpen] = useState(false);
+  const [backgroundPhoto, setBackgroundPhoto] = useState<string | null>(null);
+
+  // Load saved background photo from localStorage on component mount
+  useEffect(() => {
+    const savedPhoto = localStorage.getItem('daswos-background-photo');
+    if (savedPhoto) {
+      setBackgroundPhoto(savedPhoto);
+    }
+  }, []);
 
   // Get the sphere from URL params if it exists
   const urlParams = new URLSearchParams(window.location.search);
@@ -112,6 +123,33 @@ const Home: React.FC = () => {
 
       window.speechSynthesis.speak(utterance);
     }
+  };
+
+  // Handle photo selection
+  const handleSelectPhoto = (photoUrl: string) => {
+    setBackgroundPhoto(photoUrl);
+    localStorage.setItem('daswos-background-photo', photoUrl);
+
+    toast({
+      title: "Background updated",
+      description: "Your home page background has been updated.",
+    });
+  };
+
+  // Handle opening the photo selector
+  const handleOpenPhotoSelector = () => {
+    setIsPhotoSelectorOpen(true);
+  };
+
+  // Handle removing the background photo
+  const handleRemoveBackground = () => {
+    setBackgroundPhoto(null);
+    localStorage.removeItem('daswos-background-photo');
+
+    toast({
+      title: "Background removed",
+      description: "Your home page background has been removed.",
+    });
   };
 
   // Handle initial search - always ask if shopping regardless of AI mode
@@ -331,272 +369,275 @@ const Home: React.FC = () => {
   return (
     <div className="min-h-screen flex flex-col">
       {/* Design with proper dark mode support */}
-      <div className="bg-[#E0E0E0] dark:bg-[#222222] pt-16 pb-8 flex-grow flex items-center">
-        <div className="container mx-auto px-4 text-center w-full">
-          {/* Logo with Theme Toggle */}
-          <div className="flex flex-col items-center logo-container">
-            <div className="relative inline-block">
-              <div className="px-16 py-2">  {/* Reduced vertical padding */}
-                <DasWosLogo height={80} width="auto" />
-              </div>
-              {/* Theme Toggle Button - Positioned absolutely to the right of the logo */}
-              <button
-                onClick={toggleTheme}
-                className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-transparent flex items-center justify-center w-6 h-6 text-xs rounded-full"
-                aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+      <div
+        className="relative bg-[#E0E0E0] dark:bg-[#222222] pt-12 pb-8 flex-grow flex items-center justify-center"
+      >
+        <div className="container mx-auto px-4 max-w-6xl">
+          <div className="flex flex-col md:flex-row items-center justify-center gap-10 md:gap-16">
+            {/* Left side - Photo container */}
+            <div className="w-full md:w-1/4 relative md:mt-0">
+              <div className="text-xs text-gray-500 dark:text-gray-400 mb-1 ml-1">Background Image</div>
+              <div
+                className={`aspect-video w-full rounded-lg relative ${backgroundPhoto ? '' : 'border border-gray-300 dark:border-gray-700'} overflow-hidden shadow-md`}
               >
-                {theme === "dark" ? (
-                  <Sun className="h-4 w-4 text-yellow-500" />
+                {backgroundPhoto ? (
+                  <div
+                    className="w-full h-full"
+                    style={{
+                      backgroundImage: `url(${backgroundPhoto})`,
+                      backgroundSize: 'cover',
+                      backgroundPosition: 'center',
+                      backgroundRepeat: 'no-repeat'
+                    }}
+                  ></div>
                 ) : (
-                  <Moon className="h-4 w-4 text-gray-700 dark:text-gray-300" />
+                  <div className="w-full h-full flex items-center justify-center bg-gray-100 dark:bg-gray-800/30">
+                    <Image className="h-8 w-8 text-gray-400 opacity-50" />
+                  </div>
                 )}
-              </button>
-            </div>
 
-            {/* Animated Trust Heading - Moved above Info button */}
-            <div className="mt-0 mb-3">  {/* Removed top margin */}
-              <AnimatedTrustText
-                sentences={[
-                  "The first search engine that puts trust first.",
-                  "Helping you find what you need with confidence."
-                ]}
-                duration={5000} // 5 seconds per sentence
-              />
-            </div>
-
-            {/* Info Button - Moved from header */}
-            <div className="mt-1">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button className="px-3 py-1 border border-gray-300 dark:border-gray-600 text-black dark:text-white flex items-center text-sm rounded-sm bg-transparent">
-                    <Info className="h-4 w-4 mr-2" />
-                    <span>Info</span>
+                {/* Photo selector button - positioned at the bottom right of the photo container */}
+                <div className="absolute bottom-2 right-2 z-10 flex space-x-1 opacity-70 hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={handleOpenPhotoSelector}
+                    className="bg-white/80 dark:bg-gray-800/80 p-1.5 rounded-full shadow-sm hover:bg-white dark:hover:bg-gray-800 transition-colors"
+                    title="Change background"
+                  >
+                    <Image className="h-3.5 w-3.5 text-gray-700 dark:text-gray-300" />
                   </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="center" className="bg-white dark:bg-[#333333] text-black dark:text-white p-1 border border-gray-300 dark:border-gray-600 rounded-sm shadow-md">
-                  <div className="w-48">
-                    <DropdownMenuItem onClick={() => handleNavigation('/shopping')} className="py-1 px-2 text-xs hover:bg-gray-200 dark:hover:bg-gray-700 rounded-none flex items-center">
-                      <ShoppingCart className="mr-2 h-3 w-3" />
-                      <span>Shopping</span>
-                    </DropdownMenuItem>
 
-                    <DropdownMenuItem onClick={() => handleNavigation('/features')} className="py-1 px-2 text-xs hover:bg-gray-200 dark:hover:bg-gray-700 rounded-none flex items-center">
-                      <Bot className="mr-2 h-3 w-3" />
-                      <span>Features</span>
-                    </DropdownMenuItem>
-
-                    <DropdownMenuItem onClick={() => handleNavigation('/trust-score')} className="py-1 px-2 text-xs hover:bg-gray-200 dark:hover:bg-gray-700 rounded-none flex items-center">
-                      <ShieldCheck className="mr-2 h-3 w-3" />
-                      <span>Trust & Safety</span>
-                    </DropdownMenuItem>
-
-                    <DropdownMenuItem onClick={() => handleNavigation('/shopper-hub')} className="py-1 px-2 text-xs hover:bg-gray-200 dark:hover:bg-gray-700 rounded-none flex items-center">
-                      <UserIcon className="mr-2 h-3 w-3" />
-                      <span>For Shoppers</span>
-                    </DropdownMenuItem>
-
-                    <DropdownMenuItem onClick={() => handleNavigation('/seller-hub')} className="py-1 px-2 text-xs hover:bg-gray-200 dark:hover:bg-gray-700 rounded-none flex items-center">
-                      <StoreIcon className="mr-2 h-3 w-3" />
-                      <span>Seller Hub</span>
-                    </DropdownMenuItem>
-
-                    <DropdownMenuItem onClick={() => handleNavigation('/about-us')} className="py-1 px-2 text-xs hover:bg-gray-200 dark:hover:bg-gray-700 rounded-none flex items-center">
-                      <Info className="mr-2 h-3 w-3" />
-                      <span>About Us</span>
-                    </DropdownMenuItem>
-                  </div>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </div>
-
-          {/* Search */}
-          <div className="max-w-xl mx-auto mb-4">
-            {isAskingIfShopping ? (
-              <div className="text-center">
-                <div className="bg-blue-50 dark:bg-blue-900 border border-blue-300 dark:border-blue-700 rounded-lg p-4 mb-4">
-                  <h3 className="text-lg font-medium text-blue-900 dark:text-blue-100 mb-2">Are you shopping?</h3>
-                  <p className="text-sm text-blue-800 dark:text-blue-200 mb-3">
-                    You searched for: <span className="font-medium">{currentQuery}</span>
-                  </p>
-                  <div className="flex justify-center gap-4">
-                    <Button
-                      onClick={() => handleShoppingResponse(true)}
-                      variant="outline"
-                      className="flex items-center gap-2 border-green-500 text-green-700 hover:bg-green-50 dark:border-green-400 dark:text-green-400 dark:hover:bg-green-900"
-                    >
-                      <Check className="h-4 w-4" />
-                      Yes
-                    </Button>
-                    <Button
-                      onClick={() => handleShoppingResponse(false)}
-                      variant="outline"
-                      className="flex items-center gap-2 border-gray-500 text-gray-700 hover:bg-gray-50 dark:border-gray-400 dark:text-gray-400 dark:hover:bg-gray-900"
-                    >
-                      <X className="h-4 w-4" />
-                      No
-                    </Button>
-                  </div>
-                  <div className="mt-4 pt-3 border-t border-blue-200 dark:border-blue-700">
+                  {/* Remove background button - only shown when a background is set */}
+                  {backgroundPhoto && (
                     <button
-                      type="button"
-                      onClick={() => {
-                        // Reset conversation state
-                        setIsAiConversationActive(false);
-                        setIsAskingIfShopping(false);
-                        setConversationHistory([]);
-                        setCurrentQuery('');
-                        setAiResponse(null);
-                        // Focus the search input
-                        if (searchInputRef.current) {
-                          searchInputRef.current.focus();
-                        }
-                      }}
-                      className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
+                      onClick={handleRemoveBackground}
+                      className="bg-white/80 dark:bg-gray-800/80 p-1.5 rounded-full shadow-sm hover:bg-white dark:hover:bg-gray-800 transition-colors"
+                      title="Remove background"
                     >
-                      Cancel and start a new search
+                      <X className="h-3.5 w-3.5 text-gray-700 dark:text-gray-300" />
                     </button>
-                  </div>
+                  )}
                 </div>
               </div>
-            ) : (
-              <form onSubmit={(e) => {
-                e.preventDefault();
-                const searchInput = e.currentTarget.querySelector('input') as HTMLInputElement;
-                const query = searchInput?.value;
-                if (query?.trim()) {
-                  if (aiModeEnabled && isAiConversationActive) {
-                    // Continue the AI conversation if already active
-                    handleAiConversation(query);
-                  } else {
-                    // Always ask if shopping first, regardless of AI mode
-                    handleInitialSearch(query);
-                  }
-                }
-              }} className="flex flex-col space-y-2">
-                <div className="relative flex">
-                  <input
-                    type="text"
-                    placeholder={aiModeEnabled
-                      ? (isAiConversationActive
-                          ? searchPlaceholder || "Type your response here..."
-                          : "Ask Daswos...")
-                      : "What are you looking for?"}
-                    value={currentQuery}
-                    onChange={(e) => setCurrentQuery(e.target.value)}
-                    className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 text-black dark:text-white ${
-                      aiModeEnabled
-                        ? 'bg-blue-50 dark:bg-blue-900 border-blue-300 dark:border-blue-700'
-                        : 'bg-white dark:bg-[#222222]'
-                    } focus:outline-none`}
-                    ref={searchInputRef}
-                    disabled={isAiLoading}
-                  />
+            </div>
+
+            {/* Right side - Logo and search */}
+            <div className="w-full md:w-1/2 flex flex-col items-center justify-center mx-auto">
+              {/* Logo with Theme Toggle */}
+              <div className="flex flex-col items-center justify-center logo-container mb-2 w-full">
+                <div className="relative inline-block mx-auto">
+                  <div className="px-16 py-1 flex justify-center">
+                    <DasWosLogo height={70} width="auto" className="mx-auto" />
+                  </div>
+                  {/* Theme Toggle Button */}
                   <button
-                    type="submit"
-                    className={`border border-l-0 px-4 search-button ${
-                      aiModeEnabled
-                        ? 'bg-blue-50 dark:bg-blue-900 border-blue-300 dark:border-blue-700'
-                        : 'bg-white dark:bg-[#333333] border-gray-300 dark:border-gray-600'
-                    }`}
-                    disabled={isAiLoading}
+                    onClick={toggleTheme}
+                    className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-transparent flex items-center justify-center w-6 h-6 text-xs rounded-full"
+                    aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
                   >
-                    {isAiLoading ? (
-                      <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
-                    ) : aiModeEnabled ? (
-                      <RobotIcon className="text-blue-600 dark:text-blue-400" size={22} />
+                    {theme === "dark" ? (
+                      <Sun className="h-4 w-4 text-yellow-500" />
                     ) : (
-                      <Search className="h-5 w-5 text-black dark:text-white" />
+                      <Moon className="h-4 w-4 text-gray-700 dark:text-gray-300" />
                     )}
                   </button>
                 </div>
 
-                {/* Small control buttons below search bar */}
-                {aiModeEnabled && isAiConversationActive && !isAskingIfShopping && (
-                  <div className="flex justify-between items-center mt-2 text-xs">
-                    <div className="flex items-center space-x-3">
-                      {/* Mode toggle */}
-                      <button
-                        type="button"
-                        onClick={() => setSearchType(searchType === 'shopping' ? 'information' : 'shopping')}
-                        className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 flex items-center"
-                        title={`Switch to ${searchType === 'shopping' ? 'information' : 'shopping'} mode`}
-                      >
-                        <span className={`inline-block w-2 h-2 rounded-full mr-1 ${searchType === 'shopping' ? 'bg-green-500' : 'bg-blue-500'}`}></span>
-                        {searchType === 'shopping' ? 'Shopping' : 'Information'} mode
-                      </button>
+                {/* Animated Trust Heading */}
+                <div className="mt-0 mb-2 w-full text-center">
+                  <AnimatedTrustText
+                    sentences={[
+                      "Helping you find what you need with confidence."
+                    ]}
+                    duration={5000}
+                  />
+                </div>
+              </div>
 
-                      {/* New search button */}
+              {/* Search */}
+              <div className="w-full max-w-xl mx-auto mb-4">
+                {isAskingIfShopping ? (
+                  <div className="text-center">
+                    <div className="bg-blue-50 dark:bg-blue-900 border border-blue-300 dark:border-blue-700 rounded-lg p-4 mb-4">
+                      <h3 className="text-lg font-medium text-blue-900 dark:text-blue-100 mb-2">Are you shopping?</h3>
+                      <p className="text-sm text-blue-800 dark:text-blue-200 mb-3">
+                        You searched for: <span className="font-medium">{currentQuery}</span>
+                      </p>
+                      <div className="flex justify-center gap-4">
+                        <Button
+                          onClick={() => handleShoppingResponse(true)}
+                          variant="outline"
+                          className="flex items-center gap-2 border-green-500 text-green-700 hover:bg-green-50 dark:border-green-400 dark:text-green-400 dark:hover:bg-green-900"
+                        >
+                          <Check className="h-4 w-4" />
+                          Yes
+                        </Button>
+                        <Button
+                          onClick={() => handleShoppingResponse(false)}
+                          variant="outline"
+                          className="flex items-center gap-2 border-gray-500 text-gray-700 hover:bg-gray-50 dark:border-gray-400 dark:text-gray-400 dark:hover:bg-gray-900"
+                        >
+                          <X className="h-4 w-4" />
+                          No
+                        </Button>
+                      </div>
+                      <div className="mt-4 pt-3 border-t border-blue-200 dark:border-blue-700">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            // Reset conversation state
+                            setIsAiConversationActive(false);
+                            setIsAskingIfShopping(false);
+                            setConversationHistory([]);
+                            setCurrentQuery('');
+                            setAiResponse(null);
+                            // Focus the search input
+                            if (searchInputRef.current) {
+                              searchInputRef.current.focus();
+                            }
+                          }}
+                          className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
+                        >
+                          Cancel and start a new search
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <form onSubmit={(e) => {
+                    e.preventDefault();
+                    const searchInput = e.currentTarget.querySelector('input') as HTMLInputElement;
+                    const query = searchInput?.value;
+                    if (query?.trim()) {
+                      if (aiModeEnabled && isAiConversationActive) {
+                        // Continue the AI conversation if already active
+                        handleAiConversation(query);
+                      } else {
+                        // Always ask if shopping first, regardless of AI mode
+                        handleInitialSearch(query);
+                      }
+                    }
+                  }} className="flex flex-col space-y-2">
+                    <div className="relative flex">
+                      <input
+                        type="text"
+                        placeholder={aiModeEnabled
+                          ? (isAiConversationActive
+                              ? searchPlaceholder || "Type your response here..."
+                              : "Ask Daswos...")
+                          : "What are you looking for?"}
+                        value={currentQuery}
+                        onChange={(e) => setCurrentQuery(e.target.value)}
+                        className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 text-black dark:text-white ${
+                          aiModeEnabled
+                            ? 'bg-blue-50 dark:bg-blue-900 border-blue-300 dark:border-blue-700'
+                            : 'bg-white dark:bg-[#222222]'
+                        } focus:outline-none`}
+                        ref={searchInputRef}
+                        disabled={isAiLoading}
+                      />
                       <button
-                        type="button"
-                        onClick={() => {
-                          // Reset conversation state
-                          setIsAiConversationActive(false);
-                          setConversationHistory([]);
-                          setCurrentQuery('');
-                          setAiResponse(null);
-                          setSearchPlaceholder('');
-                          // Focus the search input
-                          if (searchInputRef.current) {
-                            searchInputRef.current.focus();
-                          }
-                        }}
-                        className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 flex items-center"
+                        type="submit"
+                        className={`border border-l-0 px-4 search-button ${
+                          aiModeEnabled
+                            ? 'bg-blue-50 dark:bg-blue-900 border-blue-300 dark:border-blue-700'
+                            : 'bg-white dark:bg-[#333333] border-gray-300 dark:border-gray-600'
+                        }`}
+                        disabled={isAiLoading}
                       >
-                        <X className="h-3 w-3 mr-1" />
-                        New search
+                        {isAiLoading ? (
+                          <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
+                        ) : aiModeEnabled ? (
+                          <RobotIcon className="text-blue-600 dark:text-blue-400" size={22} />
+                        ) : (
+                          <Search className="h-5 w-5 text-black dark:text-white" />
+                        )}
                       </button>
                     </div>
 
-                    {/* Speak button - only visible when hovering */}
-                    {aiResponse && aiResponse.hasAudio && (
-                      <button
-                        type="button"
-                        onClick={() => speakText(aiResponse.text)}
-                        className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 flex items-center opacity-70 hover:opacity-100"
-                        title="Speak the AI's response"
-                      >
-                        <Volume2 className="h-3 w-3 mr-1" />
-                        Speak
-                      </button>
-                    )}
-                  </div>
-                )}
-              </form>
-            )}
-          </div>
+                    {/* Small control buttons below search bar */}
+                    {aiModeEnabled && isAiConversationActive && !isAskingIfShopping && (
+                      <div className="flex justify-between items-center mt-2 text-xs">
+                        <div className="flex items-center space-x-3">
+                          {/* Mode toggle */}
+                          <button
+                            type="button"
+                            onClick={() => setSearchType(searchType === 'shopping' ? 'information' : 'shopping')}
+                            className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 flex items-center"
+                            title={`Switch to ${searchType === 'shopping' ? 'information' : 'shopping'} mode`}
+                          >
+                            <span className={`inline-block w-2 h-2 rounded-full mr-1 ${searchType === 'shopping' ? 'bg-green-500' : 'bg-blue-500'}`}></span>
+                            {searchType === 'shopping' ? 'Shopping' : 'Information'} mode
+                          </button>
 
-          {/* SafeSphere toggle, Daswos AI toggle, SuperSafe toggle, and conditional AutoShop button */}
-          <div className="flex flex-col items-center justify-center mb-6">
-            {/* Main buttons row - always on one line */}
-            <div className="flex flex-row items-center justify-center gap-3 mb-2">
-              <FeatureAwareSphereToggle
-                activeSphere={activeSphere}
-                onChange={handleSphereChange}
-              />
-              <div className="flex flex-col items-center">
-                <FeatureAwareAiSearchToggle
-                  isEnabled={aiModeEnabled}
-                  onToggle={(enabled) => setAiModeEnabled(enabled)}
-                  showDropdown={showAutoShop}
-                  onDropdownToggle={() => setShowAutoShop(!showAutoShop)}
-                />
-                {/* AutoShop appears directly under Daswos AI when dropdown is open */}
-                {aiModeEnabled && showAutoShop && (
-                  <div className="mt-2">
-                    <AutoShopToggle />
-                  </div>
+                          {/* New search button */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              // Reset conversation state
+                              setIsAiConversationActive(false);
+                              setConversationHistory([]);
+                              setCurrentQuery('');
+                              setAiResponse(null);
+                              setSearchPlaceholder('');
+                              // Focus the search input
+                              if (searchInputRef.current) {
+                                searchInputRef.current.focus();
+                              }
+                            }}
+                            className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 flex items-center"
+                          >
+                            <X className="h-3 w-3 mr-1" />
+                            New search
+                          </button>
+                        </div>
+
+                        {/* Speak button - only visible when hovering */}
+                        {aiResponse && aiResponse.hasAudio && (
+                          <button
+                            type="button"
+                            onClick={() => speakText(aiResponse.text)}
+                            className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 flex items-center opacity-70 hover:opacity-100"
+                            title="Speak the AI's response"
+                          >
+                            <Volume2 className="h-3 w-3 mr-1" />
+                            Speak
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </form>
                 )}
               </div>
-              <FeatureAwareSuperSafeToggle />
+
+              {/* Essential toggles for search functionality */}
+              <div className="flex flex-col items-center justify-center mb-6 w-full max-w-xl mx-auto">
+                <div className="flex flex-row items-center justify-center gap-3 mb-2">
+                  <FeatureAwareSphereToggle
+                    activeSphere={activeSphere}
+                    onChange={handleSphereChange}
+                  />
+                  <div className="flex flex-col items-center">
+                    <FeatureAwareAiSearchToggle
+                      isEnabled={aiModeEnabled}
+                      onToggle={(enabled) => setAiModeEnabled(enabled)}
+                      showDropdown={showAutoShop}
+                      onDropdownToggle={() => setShowAutoShop(!showAutoShop)}
+                    />
+                  </div>
+                  <FeatureAwareSuperSafeToggle />
+                </div>
+              </div>
             </div>
           </div>
-
-          {/* Navigation tabs removed to avoid duplication with the bottom navigation bar */}
-
-
         </div>
       </div>
+
+      {/* Photo Selector Modal */}
+      <PhotoSelector
+        isOpen={isPhotoSelectorOpen}
+        onClose={() => setIsPhotoSelectorOpen(false)}
+        onSelectPhoto={handleSelectPhoto}
+      />
     </div>
   );
 };

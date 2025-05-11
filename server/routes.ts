@@ -22,6 +22,7 @@ import { setupCategorySearchRoutes } from './routes/category-search';
 import createUserSettingsRoutes from './routes/user-settings';
 import { createStripeRoutes } from './routes/stripe';
 import { createPaymentRoutes } from './routes/payment';
+import { createInformationRoutes } from './routes/information-routes';
 import {
   createPaymentIntent,
   createCustomer,
@@ -55,10 +56,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication routes
   setupAuth(app);
 
-  // Set up AI routes
+  // Set up only the AI search routes
   setupAiSearchRoutes(app, storage);
-  setupSellerAiRoutes(app, storage);
-  setupCategorySearchRoutes(app, storage);
 
   // Health check endpoint for Docker
   app.get("/health", (req, res) => {
@@ -407,15 +406,15 @@ app.post('/api/create-payment-intent', async (req, res) => {
       if (!req.isAuthenticated()) {
         return res.json({
           items: [
-            { id: 'home', label: 'Home', path: '/', icon: 'Home', isDefault: true },
-            { id: 'bulkbuy', label: 'BulkBuy', path: '/bulk-buy', icon: 'BulkBuyIcon', isDefault: true },
-            { id: 'daslist', label: 'das.list', path: '/d-list', icon: 'List', isDefault: true },
-            { id: 'jobs', label: 'Jobs', path: '/browse-jobs', icon: 'Briefcase', isDefault: true },
-            { id: 'ai-assistant', label: 'AI Assistant', path: '/ai-assistant', icon: 'Bot', isDefault: true },
+            // Home is now fixed in the navigation bar and not part of customizable items
+            { id: 'bulkbuy', label: 'BulkBuy', path: '/bulk-buy', icon: 'BulkBuyIcon' },
+            { id: 'splitbuy', label: 'SplitBuy', path: '/split-buy', icon: 'SplitBuyIcon' },
+            { id: 'daslist', label: 'das.list', path: '/d-list', icon: 'List' },
+            { id: 'jobs', label: 'Jobs', path: '/browse-jobs', icon: 'Briefcase' },
+            { id: 'ai-assistant', label: 'AI Assistant', path: '/ai-assistant', icon: 'Bot' },
             { id: 'cart', label: 'Cart', path: '/cart', icon: 'ShoppingCart' },
             { id: 'daswos-coins', label: 'DasWos Coins', path: '/daswos-coins', icon: 'Coins' }
-          ],
-          maxVisibleItems: 5
+          ]
         });
       }
 
@@ -431,14 +430,15 @@ app.post('/api/create-payment-intent', async (req, res) => {
         // Return default preferences if none are saved
         return res.json({
           items: [
-            { id: 'home', label: 'Home', path: '/', icon: 'Home', isDefault: true },
-            { id: 'bulkbuy', label: 'BulkBuy', path: '/bulk-buy', icon: 'BulkBuyIcon', isDefault: true },
-            { id: 'daslist', label: 'das.list', path: '/d-list', icon: 'List', isDefault: true },
-            { id: 'ai-assistant', label: 'AI Assistant', path: '/ai-assistant', icon: 'Bot', isDefault: true },
+            // Home is now fixed in the navigation bar and not part of customizable items
+            { id: 'bulkbuy', label: 'BulkBuy', path: '/bulk-buy', icon: 'BulkBuyIcon' },
+            { id: 'splitbuy', label: 'SplitBuy', path: '/split-buy', icon: 'SplitBuyIcon' },
+            { id: 'daslist', label: 'das.list', path: '/d-list', icon: 'List' },
+            { id: 'jobs', label: 'Jobs', path: '/browse-jobs', icon: 'Briefcase' },
+            { id: 'ai-assistant', label: 'AI Assistant', path: '/ai-assistant', icon: 'Bot' },
             { id: 'cart', label: 'Cart', path: '/cart', icon: 'ShoppingCart' },
             { id: 'daswos-coins', label: 'DasWos Coins', path: '/daswos-coins', icon: 'Coins' }
-          ],
-          maxVisibleItems: 5
+          ]
         });
       }
     } catch (error) {
@@ -460,14 +460,14 @@ app.post('/api/create-payment-intent', async (req, res) => {
           label: z.string(),
           path: z.string(),
           icon: z.string(),
-          isDefault: z.boolean().optional()
-        })),
-        maxVisibleItems: z.number().min(1).max(10)
+          isDefault: z.boolean().optional(),
+          showInCollapsed: z.boolean().optional()
+        }))
       });
 
-      const { items, maxVisibleItems } = schema.parse(req.body);
+      const { items } = schema.parse(req.body);
 
-      const preferences = await storage.saveUserDasbarPreferences(req.user.id, items, maxVisibleItems);
+      const preferences = await storage.saveUserDasbarPreferences(req.user.id, items);
 
       res.json({
         success: true,
@@ -3996,35 +3996,14 @@ app.post('/api/create-payment-intent', async (req, res) => {
     }
   });
 
-  // Use the new seller routes
-  app.use('/api/sellers', createSellerRoutes(storage));
-
-  // Use the product routes
+  // Use the product routes for basic product search
   app.use('/api/products', createProductRoutes(storage));
 
-  // Use the user settings routes
-  app.use('/api/user', createUserSettingsRoutes(storage));
+  // Use information routes for information search
+  app.use('/api/information', createInformationRoutes(storage));
 
-  // Setup Daswos AI chat routes
-  app.use('/api/daswos-ai', createDaswosAiRoutes(storage));
-
-  // Setup Stripe routes
-  app.use('/api/stripe', createStripeRoutes(storage));
-
-  // Setup Payment routes
-  app.use('/api/payment', createPaymentRoutes(storage));
-
-  // Setup AI search routes
-  setupAiSearchRoutes(app, storage);
-
-  // Setup Seller AI routes for product suggestions
-  setupSellerAiRoutes(app, storage);
-
-  // These AI features are planned for future implementation
-  // setupAiShopperChatRoutes(app, storage);
-  // setupLangchainChatRoutes(app, storage);
-  // setupAnthropicChatRoutes(app, storage);
-  // setupProductListingRoutes(app, storage);
+  // We already set up AI search routes at the beginning
+  // No need to call setupAiSearchRoutes again
 
   const httpServer = createServer(app);
   return httpServer;

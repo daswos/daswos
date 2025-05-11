@@ -1,0 +1,53 @@
+/* User Settings Page Styles */
+.user-settings-container {
+  padding-left: 100px; /* Add padding to the left to avoid overlap with the dasbar buttons */
+  padding-right: 20px;
+  padding-top: 20px;
+  padding-bottom: 40px;
+  max-width: 1200px;
+  margin: 0 auto;
+  position: relative; /* Ensure proper stacking context */
+  z-index: 1; /* Lower z-index than the dasbar buttons */
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .user-settings-container {
+    padding-left: 80px; /* Slightly less padding on smaller screens but still enough to avoid overlap */
+  }
+}
+
+@media (max-width: 480px) {
+  .user-settings-container {
+    padding-left: 70px; /* Even less padding on very small screens */
+    padding-right: 10px;
+  }
+}
+
+/* Ensure content doesn't overlap with the quick access buttons */
+.user-settings-card {
+  width: 100%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  background-color: white;
+  border-radius: 8px;
+  overflow: hidden;
+  transition: box-shadow 0.3s ease;
+}
+
+.user-settings-card:hover {
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+}
+
+/* Add some spacing between elements */
+.settings-section {
+  margin-bottom: 2rem;
+}
+
+/* Make sure the drag handle is visible */
+.drag-handle {
+  cursor: grab;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}

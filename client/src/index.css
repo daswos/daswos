@@ -8,6 +8,24 @@
 /* Global padding for dasbar */
 .page-content {
   padding-bottom: 80px !important; /* Ensure content isn't hidden behind the dasbar */
+  padding-left: 80px !important; /* Add padding to the left to avoid overlap with the dasbar buttons */
+}
+
+/* Main content padding for all pages */
+main {
+  padding-left: 80px !important; /* Add padding to the left to avoid overlap with the dasbar buttons */
+}
+
+@media (max-width: 768px) {
+  main {
+    padding-left: 70px !important; /* Slightly less padding on smaller screens */
+  }
+}
+
+@media (max-width: 480px) {
+  main {
+    padding-left: 60px !important; /* Even less padding on very small screens */
+  }
 }
 
 /* AI Assistant page specific styles */

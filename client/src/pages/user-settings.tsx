@@ -9,6 +9,7 @@ import { Separator } from '@/components/ui/separator';
 import { useDasbar, availableItems, NavigationItem } from '@/contexts/dasbar-context';
 import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
 import { Grip, Plus, Trash2, Save, RotateCcw, Loader2 } from 'lucide-react';
+import './user-settings.css';
 
 const UserSettings = () => {
   const [, navigate] = useLocation();
@@ -21,8 +22,7 @@ const UserSettings = () => {
     moveItem,
     resetToDefaults,
     updateDasbarItems,
-    maxVisibleItems,
-    setMaxVisibleItems,
+    toggleCollapsedVisibility,
     savePreferences,
     isLoading
   } = useDasbar();
@@ -42,8 +42,7 @@ const UserSettings = () => {
   // Track initial load
   const [isInitialLoad, setIsInitialLoad] = useState(true);
 
-  // Timer for debouncing maxVisibleItems changes
-  const maxVisibleItemsTimer = useRef<NodeJS.Timeout | null>(null);
+  // No timer needed anymore
 
   // Set initial load to false after component mounts
   useEffect(() => {
@@ -149,8 +148,7 @@ const UserSettings = () => {
     // Update local state to match
     setDasbarItems(defaultItemsArray);
 
-    // Reset max visible items to default (7)
-    setMaxVisibleItems(7);
+    // No need to reset max visible items anymore
 
     // Save to server in the background
     savePreferences();
@@ -192,8 +190,8 @@ const UserSettings = () => {
 
   if (!user) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <Card>
+      <div className="user-settings-container">
+        <Card className="user-settings-card">
           <CardHeader>
             <CardTitle>User Settings</CardTitle>
             <CardDescription>Please log in to access your settings.</CardDescription>
@@ -204,10 +202,10 @@ const UserSettings = () => {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="user-settings-container">
       <h1 className="text-2xl font-bold mb-6">User Settings</h1>
 
-      <Card>
+      <Card className="user-settings-card">
         <CardHeader>
           <CardTitle>DasBar Settings</CardTitle>
           <CardDescription>Customize your DasBar navigation</CardDescription>
@@ -219,44 +217,12 @@ const UserSettings = () => {
             </div>
           ) : (
             <div className="space-y-6">
-              <div className="flex flex-col space-y-4">
-                <Label htmlFor="max-visible-items" className="text-base">Maximum Visible Items</Label>
-                <div className="flex items-center space-x-2">
-                  <input
-                    id="max-visible-items"
-                    type="range"
-                    min="3"
-                    max="10"
-                    value={maxVisibleItems}
-                    onChange={(e) => {
-                      const newValue = parseInt(e.target.value);
-                      // Update both local state and context
-                      setMaxVisibleItems(newValue);
 
-                      // Debounce the save to avoid too many updates
-                      if (maxVisibleItemsTimer.current) {
-                        clearTimeout(maxVisibleItemsTimer.current);
-                      }
 
-                      maxVisibleItemsTimer.current = setTimeout(() => {
-                        handleSave();
-                      }, 500);
-                    }}
-                    className="w-full"
-                  />
-                  <span className="text-sm font-medium">{maxVisibleItems}</span>
-                </div>
-                <p className="text-sm text-gray-500">
-                  Set how many items to show in your DasBar. Additional items will appear in the "More" menu.
-                </p>
-              </div>
-
-              <Separator />
-
-              <div>
+              <div className="settings-section">
                 <Label className="text-base mb-2 block">Arrange DasBar Items</Label>
                 <p className="text-sm text-gray-500 mb-4">
-                  Drag and drop to reorder items. Items beyond the maximum visible limit will appear in the "More" menu.
+                  Drag and drop to reorder items in your Dasbar.
                 </p>
 
                 <DragDropContext onDragEnd={handleDragEnd}>
@@ -268,31 +234,21 @@ const UserSettings = () => {
                         className="space-y-2 mb-4"
                       >
                         {dasbarItems.map((item, index) => {
-                          const isVisible = index < maxVisibleItems;
                           return (
                             <Draggable key={item.id} draggableId={item.id} index={index}>
                               {(provided) => (
                                 <div
                                   ref={provided.innerRef}
                                   {...provided.draggableProps}
-                                  className={`
-                                    flex items-center justify-between p-3 rounded-md border
-                                    ${isVisible ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-900'}
-                                    ${index === maxVisibleItems - 1 ? 'border-b-2 border-b-blue-500' : ''}
-                                  `}
+                                  className="flex items-center justify-between p-3 rounded-md border bg-white dark:bg-gray-800"
                                 >
                                   <div className="flex items-center space-x-3">
-                                    <div {...provided.dragHandleProps}>
+                                    <div {...provided.dragHandleProps} className="drag-handle">
                                       <Grip className="h-5 w-5 text-gray-400" />
                                     </div>
-                                    <span className={`${!isVisible ? 'text-gray-500' : ''}`}>
+                                    <span>
                                       {item.label}
                                     </span>
-                                    {!isVisible && (
-                                      <span className="text-xs bg-gray-200 dark:bg-gray-700 px-2 py-0.5 rounded">
-                                        More menu
-                                      </span>
-                                    )}
                                     {item.isDefault && (
                                       <span className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-2 py-0.5 rounded">
                                         Default
@@ -347,6 +303,69 @@ const UserSettings = () => {
                     </Button>
                   </div>
                 )}
+              </div>
+
+              <Separator className="my-6" />
+
+              <div className="settings-section">
+                <Label className="text-base mb-2 block">Collapsed Mode Quick Access</Label>
+                <p className="text-sm text-gray-500 mb-4">
+                  Select which buttons should be visible next to the collapsed 'D' button for quick access without expanding the Dasbar.
+                </p>
+
+                <div className="space-y-3">
+                  {dasbarItems.map((item) => (
+                    <div key={item.id} className="flex items-center justify-between p-3 rounded-md border bg-white dark:bg-gray-800">
+                      <div className="flex items-center space-x-3">
+                        <span>{item.label}</span>
+                        {item.showInCollapsed && (
+                          <span className="text-xs bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 px-2 py-0.5 rounded">
+                            Quick Access
+                          </span>
+                        )}
+                      </div>
+                      <Button
+                        variant={item.showInCollapsed ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => {
+                          // Call the context function
+                          toggleCollapsedVisibility(item.id);
+
+                          // Update local state to reflect the change
+                          const newShowInCollapsed = !item.showInCollapsed;
+                          setDasbarItems(prevItems =>
+                            prevItems.map(prevItem =>
+                              prevItem.id === item.id
+                                ? { ...prevItem, showInCollapsed: newShowInCollapsed }
+                                : prevItem
+                            )
+                          );
+
+                          // Log for debugging
+                          console.log(`Toggled ${item.id} to showInCollapsed: ${newShowInCollapsed}`);
+
+                          // Show feedback to the user
+                          toast({
+                            title: item.showInCollapsed
+                              ? `Removed ${item.label} from quick access`
+                              : `Added ${item.label} to quick access`,
+                            description: item.showInCollapsed
+                              ? `${item.label} will no longer appear in collapsed mode`
+                              : `${item.label} will now appear next to the D button in collapsed mode`,
+                          });
+
+                          // Force save to ensure changes are persisted
+                          setTimeout(() => {
+                            savePreferences();
+                          }, 100);
+                        }}
+                        className="h-8"
+                      >
+                        {item.showInCollapsed ? "Remove" : "Add"}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <div className="flex justify-end pt-4">
