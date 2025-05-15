@@ -28,14 +28,9 @@ const DasbarBackButton: React.FC<DasbarBackButtonProps> = ({
       onClick={handleBack}
       className={`nav-button back-button ${className}`}
       aria-label="Go back"
+      title="Back"
     >
-      <div className="flex items-center justify-center relative">
-        <ArrowLeft className="h-5 w-5" />
-        <div className="logo-container h-3 w-3 absolute" style={{ transform: 'translateX(8px)' }}>
-          <DasWosHeaderLogo size={12} />
-        </div>
-      </div>
-      <span>Back</span>
+      <ArrowLeft className="h-5 w-5" />
     </button>
   );
 };

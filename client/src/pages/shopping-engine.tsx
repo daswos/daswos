@@ -150,13 +150,13 @@ const ShoppingEngine: React.FC = () => {
               {/* Theme Toggle Button - Positioned absolutely to the right of the logo */}
               <button
                 onClick={toggleTheme}
-                className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-transparent flex items-center justify-center w-6 h-6 text-xs rounded-full"
+                className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-transparent flex items-center justify-center w-6 h-6 text-xs rounded-full hover:bg-gray-100/30 dark:hover:bg-gray-800/30"
                 aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
               >
                 {theme === "dark" ? (
-                  <Sun className="h-4 w-4 text-yellow-500" />
+                  <Sun className="h-4 w-4 text-gray-400" />
                 ) : (
-                  <Moon className="h-4 w-4 text-gray-700 dark:text-gray-300" />
+                  <Moon className="h-4 w-4 text-gray-400" />
                 )}
               </button>
             </div>

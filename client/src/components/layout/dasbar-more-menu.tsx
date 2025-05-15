@@ -128,7 +128,7 @@ const DasbarMoreMenu: React.FC<DasbarMoreMenuProps> = ({ className = '' }) => {
               height: 40px;
               background-color: ${isDarkMode ? '#333333' : '#f3f4f6'};
               color: ${isDarkMode ? 'white' : 'black'};
-              border-radius: 50%;
+              border-radius: 8px;
               display: flex;
               align-items: center;
               justify-content: center;
@@ -309,21 +309,16 @@ const DasbarMoreMenu: React.FC<DasbarMoreMenuProps> = ({ className = '' }) => {
     <button
       onClick={toggleCollapse}
       className={`
-        text-white transition-colors collapse-button
+        transition-colors expand-button
         ${isCollapsed ? 'collapsed-button' : ''}
         ${className}
       `}
       aria-label={isCollapsed ? "Expand Dasbar" : "Collapse Dasbar"}
       title={isCollapsed ? "Expand Dasbar" : "Collapse Dasbar"}
-      style={{ position: 'relative' }}
     >
-      {isCollapsed ? (
-        <div className="dasbar-logo">
-          <DasWosHeaderLogo size={24} />
-        </div>
-      ) : (
-        <span className="dasbar-text">collapse</span>
-      )}
+      <div className="dasbar-logo">
+        <DasWosHeaderLogo size={24} />
+      </div>
       <span className="sr-only">{isCollapsed ? "Expand" : "Collapse"}</span>
     </button>
   );

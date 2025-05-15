@@ -23,14 +23,9 @@ const DasbarForwardButton: React.FC<DasbarForwardButtonProps> = ({
       onClick={handleForward}
       className={`nav-button forward-button ${className}`}
       aria-label="Go forward"
+      title="Forward"
     >
-      <div className="flex items-center justify-center relative">
-        <ArrowRight className="h-5 w-5" />
-        <div className="logo-container h-3 w-3 absolute" style={{ transform: 'translateX(-8px)' }}>
-          <DasWosHeaderLogo size={12} />
-        </div>
-      </div>
-      <span>Forward</span>
+      <ArrowRight className="h-5 w-5" />
     </button>
   );
 };

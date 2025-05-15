@@ -433,6 +433,15 @@ const Header = () => {
             <span>Sell</span>
           </button>
 
+          {/* AutoShop Button */}
+          <button
+            onClick={() => handleNavigation('/autoshop-dashboard')}
+            className="bg-white px-2 py-1 border border-gray-300 text-black flex items-center text-xs mr-2"
+          >
+            <ShoppingCart className="h-4 w-4 mr-1" />
+            <span>AutoShop</span>
+          </button>
+
           {/* Shopping Cart Button - Modern style matching user toggle */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

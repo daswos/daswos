@@ -1,7 +1,7 @@
 /* Dasbar styles */
 .dasbar {
   box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
-  height: 60px; /* Slightly taller for better visibility */
+  height: 50px; /* Match the header height */
   transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1);
   /* Position fixed at the bottom with some space */
   position: fixed !important;
@@ -9,14 +9,14 @@
   /* Add margin to ensure it's not flush with the edge */
   margin: 0 auto;
   /* Add rounded corners for better appearance */
-  border-radius: 12px;
-  /* Limit width for better appearance on large screens */
-  max-width: 800px;
+  border-radius: 0;
+  /* Limit width to match the search bar */
+  max-width: 580px;
   /* Center the bar */
   left: 50% !important;
   transform: translateX(-50%);
   /* Add some horizontal padding */
-  padding: 0 10px;
+  padding: 0;
   /* Ensure it doesn't stretch to the edges on large screens */
   width: calc(100% - 30px);
   /* Add a subtle background blur for modern look */
@@ -129,7 +129,7 @@
   margin: 0;
   width: 100%;
   height: 100%;
-  border-radius: 50%;
+  border-radius: 8px;
   padding: 0;
   min-width: unset;
 }
@@ -163,45 +163,47 @@
   }
 }
 
-/* Make buttons more visible */
+/* Make buttons match the header style */
 .dasbar button {
   font-weight: 500;
   transition: all 0.2s ease;
-  padding: 0;
-  margin: 0;
-  border-radius: 50%;
-  width: 40px;
-  height: 40px;
+  padding: 0 8px;
+  margin: 0 2px;
+  border-radius: 8px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
   position: relative;
-  background-color: #f3f4f6; /* Light gray background */
+  background-color: white; /* White background */
   color: #000000; /* Ensure text is black for visibility */
+  border: 1px solid #d1d5db; /* Gray border */
+  font-size: 12px;
 }
 
 /* Specific styling for navigation items in the right group */
 .dasbar .nav-item {
   margin: 0 2px; /* Reduced margin for closer spacing */
-  width: 38px; /* Slightly smaller for tighter grouping */
-  height: 38px; /* Slightly smaller for tighter grouping */
+  height: 32px; /* Match header button height */
+  border-radius: 8px;
 }
 
 /* Styling for dasbar items */
 .dasbar .dasbar-item {
   margin: 0 2px;
-  width: 40px;
-  height: 40px;
+  height: 32px;
   flex-shrink: 0;
   position: relative;
-  border-radius: 50%;
-  background-color: #f3f4f6;
+  border-radius: 8px;
+  background-color: white;
   color: #000000;
   transition: all 0.2s ease;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  border: 1px solid #d1d5db;
+  padding: 0 8px;
+  font-size: 12px;
 }
 
 .dark .dasbar .dasbar-item {
@@ -274,8 +276,14 @@
 }
 
 /* Hide scrollbar for Chrome, Safari and Opera */
-.dasbar .navigation-group-dasbar::-webkit-scrollbar {
+.hide-scrollbar::-webkit-scrollbar {
   display: none;
+}
+
+/* Hide scrollbar for Firefox */
+.hide-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
 .dasbar .navigation-group-right {
@@ -337,7 +345,7 @@
   border-radius: 3px 3px 0 0;
 }
 
-/* Navigation buttons styling (home and back) */
+/* Navigation buttons styling */
 .dasbar .nav-button {
   position: relative;
   display: flex;
@@ -346,65 +354,53 @@
   height: 40px;
   width: 40px;
   padding: 0;
-  border-radius: 50%;
-  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  border-radius: 8px;
+  border: none;
   transition: all 0.2s ease;
   z-index: 60;
+  font-size: 12px;
+  background-color: white;
 }
 
-/* Position for specific navigation buttons */
-.dasbar .back-button,
-.dasbar .forward-button,
-.dasbar .home-button {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
+/* Home logo button styling */
+.dasbar .home-logo-button {
+  background-color: black;
+  color: white;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.dasbar .home-logo-button:hover {
+  background-color: #333;
+}
+
+.dasbar .home-logo-button .dasbar-logo {
+  height: 24px;
+  width: 24px;
 }
 
 /* Back button styling */
 .dasbar .back-button {
-  left: 5px; /* Position on the far left */
-  background-color: #000000; /* Black background like in the image */
-  border: none;
-  color: #ffffff; /* White text/icon */
-}
-
-.dasbar .back-button:hover {
-  background-color: #333333; /* Slightly lighter black on hover */
-}
-
-.dasbar .back-button .logo-container {
+  background-color: white;
+  color: #000000;
+  border: 1px solid #d1d5db;
   display: flex;
   align-items: center;
   justify-content: center;
-  opacity: 0.3;
+}
+
+.dasbar .back-button:hover {
+  background-color: #f3f4f6;
 }
 
 /* Forward button styling */
 .dasbar .forward-button {
-  left: 55px; /* Position to the right of the back button */
-  background-color: #000000; /* Black background like the back button */
-  border: none;
-  color: #ffffff; /* White text/icon */
-}
-
-.dasbar .forward-button:hover {
-  background-color: #333333; /* Slightly lighter black on hover */
-}
-
-.dasbar .forward-button .logo-container {
+  background-color: white;
+  color: #000000;
+  border: 1px solid #d1d5db;
   display: flex;
   align-items: center;
   justify-content: center;
-  opacity: 0.3;
-}
-
-/* Home button styling */
-.dasbar .home-button {
-  left: 105px; /* Position to the right of the forward button */
-  background-color: #f3f4f6; /* Light gray background */
-  border: none;
-  color: #374151; /* Dark gray text/icon */
 }
 
 /* Remove the collapse-button-left class as it's no longer needed */
@@ -487,23 +483,24 @@
   }
 }
 
-/* Collapse button styling */
-.dasbar .collapse-button {
+/* Expand button styling */
+.dasbar .expand-button {
   position: relative;
   transition: all 0.2s ease;
-  background-color: #000000; /* Black background */
-  color: white; /* White text/icon */
+  background-color: black;
+  color: white;
   border: none;
-  min-width: 80px;
+  width: 40px;
   height: 40px;
-  border-radius: 20px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0 15px;
+  padding: 0;
+  overflow: hidden;
 }
 
-.dasbar .collapse-button .dasbar-text {
+.dasbar .expand-button .dasbar-text {
   position: static;
   opacity: 1;
   visibility: visible;
@@ -516,16 +513,16 @@
   white-space: nowrap;
 }
 
-.dark .dasbar .collapse-button {
+.dark .dasbar .expand-button {
   color: white; /* Keep white in dark mode too */
 }
 
-.dasbar .collapse-button:hover {
+.dasbar .expand-button:hover {
   background-color: #333333; /* Darker black on hover */
 }
 
-/* Hide the text label for the collapse button */
-.dasbar .collapse-button span:not(.dasbar-text) {
+/* Hide the text label for the expand button */
+.dasbar .expand-button span:not(.dasbar-text) {
   display: none;
 }
 
@@ -542,7 +539,7 @@
   cursor: pointer;
   opacity: 1 !important;
   visibility: visible !important;
-  border-radius: 50%;
+  border-radius: 8px;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
 }
 
@@ -550,7 +547,7 @@
 .dasbar .collapsed-button .dasbar-logo {
   width: 100%;
   height: 100%;
-  border-radius: 50%;
+  border-radius: 8px;
   display: flex !important;
   align-items: center;
   justify-content: center;
@@ -564,7 +561,7 @@
   color: white;
   width: 100%;
   height: 100%;
-  border-radius: 50%;
+  border-radius: 8px;
   display: flex !important;
   align-items: center;
   justify-content: center;

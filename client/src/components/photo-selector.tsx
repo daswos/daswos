@@ -13,13 +13,12 @@ import { useAuth } from '@/hooks/use-auth';
 import { Image, Upload, Check } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
-// Stock photos for non-logged-in users using Unsplash API for placeholder images
+// Stock photos using local SVG files
 const stockPhotos = [
-  { id: 1, url: 'https://source.unsplash.com/random/800x600?workspace', alt: 'Modern workspace with laptop' },
-  { id: 2, url: 'https://source.unsplash.com/random/800x600?mountains', alt: 'Mountain landscape' },
-  { id: 3, url: 'https://source.unsplash.com/random/800x600?city', alt: 'City skyline' },
-  { id: 4, url: 'https://source.unsplash.com/random/800x600?beach', alt: 'Beach sunset' },
-  { id: 5, url: 'https://source.unsplash.com/random/800x600?forest', alt: 'Forest path' },
+  { id: 2, url: '/images/stock/stock-photo-2.svg', alt: 'Mountain landscape' },
+  { id: 3, url: '/images/stock/stock-photo-3.svg', alt: 'City skyline' },
+  { id: 4, url: '/images/stock/stock-photo-4.svg', alt: 'Beach sunset' },
+  { id: 5, url: '/images/stock/stock-photo-5.svg', alt: 'Forest path' },
 ];
 
 interface PhotoSelectorProps {
@@ -126,8 +125,14 @@ const PhotoSelector: React.FC<PhotoSelectorProps> = ({
                     alt={photo.alt}
                     className="w-full h-full object-cover relative z-10"
                     onError={(e) => {
-                      // If image fails to load, show fallback
+                      // If image fails to load, show fallback and log error
+                      console.error(`Failed to load image: ${photo.url}`);
                       e.currentTarget.style.display = 'none';
+                      toast({
+                        title: "Image failed to load",
+                        description: `Could not load ${photo.alt} image.`,
+                        variant: "destructive"
+                      });
                     }}
                   />
                   {selectedPhoto === photo.url && (

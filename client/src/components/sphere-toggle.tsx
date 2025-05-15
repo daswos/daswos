@@ -29,36 +29,14 @@ const SphereToggle: React.FC<SphereToggleProps> = ({
   const isSafeSphere = activeSphere === 'safesphere';
   const protectedFullText = 'Protected';
 
-  // Animated text effect for "Protected" message
+  // Set the protected text immediately without animation
   useEffect(() => {
     if (isSafeSphere) {
-      // Reset the text
-      setProtectedText('');
-
-      // Animate the text letter by letter
-      const letters = protectedFullText.split('');
-      let currentText = '';
-
-      const animateText = (index: number) => {
-        if (index < letters.length) {
-          currentText += letters[index];
-          setProtectedText(currentText);
-
-          // Schedule the next letter animation
-          setTimeout(() => animateText(index + 1), 150);
-        }
-      };
-
-      // Start the animation with a small delay
-      const animationTimeout = setTimeout(() => animateText(0), 300);
-
-      // Clear timeout on cleanup
-      return () => clearTimeout(animationTimeout);
+      setProtectedText(protectedFullText);
     } else {
-      // Clear the text when SafeSphere is turned off
       setProtectedText('');
     }
-  }, [isSafeSphere]);
+  }, [isSafeSphere, protectedFullText]);
 
   const handleSphereToggle = (checked: boolean) => {
     // If turning off SafeSphere, show confirmation dialog
@@ -82,27 +60,29 @@ const SphereToggle: React.FC<SphereToggleProps> = ({
 
   return (
     <div className={`flex items-center justify-center ${className}`}>
-      <div className="flex items-center bg-white dark:bg-[#333333] border border-gray-300 dark:border-gray-600 px-3 py-1 SafeSphere-active-indicator">
-        <input
-          type="checkbox"
-          id="sphere-mode"
-          checked={isSafeSphere}
-          onChange={e => handleSphereToggle(e.target.checked)}
-          className="mr-2 h-4 w-4"
-        />
-        <Label htmlFor="sphere-mode" className="flex items-center cursor-pointer text-sm">
-          <ShieldCheckIcon className="h-4 w-4 mr-2 text-black dark:text-white" />
-          <div className="flex items-center whitespace-nowrap">
-            <span className="font-normal text-black dark:text-white">
-              SafeSphere
-            </span>
-            {isSafeSphere && (
-              <span className="ml-2 text-green-600 font-medium text-xs animated-text">
-                {protectedText}
-              </span>
-            )}
-          </div>
-        </Label>
+      <div
+        className={`bg-white dark:bg-gray-800 rounded-sm shadow-sm border border-gray-300 dark:border-gray-600 inline-flex items-center px-2 py-1.5 ${isSafeSphere ? 'w-[185px]' : 'w-[135px]'} cursor-pointer transition-all duration-200`}
+        onClick={() => handleSphereToggle(!isSafeSphere)}
+      >
+        {/* Square checkbox */}
+        <div className="w-5 h-5 border border-gray-400 dark:border-gray-500 bg-white dark:bg-gray-700 flex items-center justify-center mr-2 flex-shrink-0">
+          {isSafeSphere && (
+            <svg className="w-4 h-4 text-gray-800 dark:text-gray-200" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M5 12l5 5L20 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"></path>
+            </svg>
+          )}
+        </div>
+
+        {/* Shield icon */}
+        <ShieldCheckIcon className="h-4 w-4 mr-2 text-gray-700 dark:text-gray-300 flex-shrink-0" />
+
+        {/* Text */}
+        <span className="text-gray-900 dark:text-gray-100 font-medium text-sm flex-shrink-0 whitespace-nowrap w-[80px]">SafeSphere</span>
+
+        {/* Status label - only shown when active */}
+        {isSafeSphere && (
+          <span className="ml-auto text-green-500 text-[9px] font-medium w-[65px] text-right pr-2">Protected</span>
+        )}
 
         {/* Confirmation dialog for disabling SafeSphere */}
         <AlertDialog open={alertDialogOpen} onOpenChange={setAlertDialogOpen}>

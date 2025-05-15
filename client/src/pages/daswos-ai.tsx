@@ -15,7 +15,8 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, MessageSquare, Plus, Send, Archive, Edit, ExternalLink } from 'lucide-react';
+import { Loader2, MessageSquare, Plus, Send, Archive, Edit, ExternalLink, Briefcase } from 'lucide-react';
+import { useWorkspaceAI } from '@/hooks/use-workspace-ai';
 
 interface Chat {
   id: number;
@@ -54,6 +55,7 @@ export default function DaswosAIPage() {
   const [newTitle, setNewTitle] = useState('');
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { getWorkspaceContentForAI, hasWorkspaceItems, workspaceItemCount } = useWorkspaceAI();
 
   // Fetch all chats
   const {
@@ -116,11 +118,19 @@ export default function DaswosAIPage() {
   });
 
   const sendMessageMutation = useMutation({
-    mutationFn: ({ chatId, content }: { chatId: number; content: string }) => {
+    mutationFn: ({
+      chatId,
+      content,
+      metadata = {}
+    }: {
+      chatId: number;
+      content: string;
+      metadata?: any
+    }) => {
       return apiRequest(`/api/daswos-ai/chats/${chatId}/messages`, 'POST', {
         role: 'user',
         content,
-        metadata: {},
+        metadata,
       });
     },
     onSuccess: () => {
@@ -163,16 +173,32 @@ export default function DaswosAIPage() {
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeChat || !userInput.trim()) return;
-    
+
+    // Get workspace content if available
+    const workspaceContent = getWorkspaceContentForAI();
+
+    // Combine user input with workspace content if available
+    let messageContent = userInput.trim();
+    if (workspaceContent) {
+      // Add a note about workspace content for the user's message
+      messageContent += "\n\n[Note: Including content from my workspace for context]";
+    }
+
     sendMessageMutation.mutate({
       chatId: activeChat.id,
-      content: userInput.trim(),
+      content: messageContent,
+      // Include workspace content in metadata
+      metadata: {
+        workspaceContent: workspaceContent || null,
+        hasWorkspaceItems: hasWorkspaceItems(),
+        workspaceItemCount: workspaceItemCount
+      }
     });
   };
 
   const handleUpdateTitle = () => {
     if (!activeChat || !newTitle.trim()) return;
-    
+
     updateChatTitleMutation.mutate({
       id: activeChat.id,
       title: newTitle.trim(),
@@ -189,7 +215,7 @@ export default function DaswosAIPage() {
         </div>
       );
     }
-    
+
     // For regular messages, render the content with paragraph breaks
     return (
       <div className="whitespace-pre-wrap break-words">
@@ -205,7 +231,7 @@ export default function DaswosAIPage() {
   return (
     <div className="container mx-auto py-6">
       <h1 className="text-3xl font-bold mb-6">Daswos AI Chat</h1>
-      
+
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         {/* Chat Sidebar */}
         <div className="md:col-span-1 space-y-4">
@@ -221,7 +247,7 @@ export default function DaswosAIPage() {
             )}
             New Chat
           </Button>
-          
+
           {isLoadingChats ? (
             <div className="flex justify-center py-4">
               <Loader2 className="h-6 w-6 animate-spin" />
@@ -258,7 +284,7 @@ export default function DaswosAIPage() {
             </div>
           )}
         </div>
-        
+
         {/* Chat Main */}
         <div className="md:col-span-3">
           {!activeChat ? (
@@ -318,7 +344,7 @@ export default function DaswosAIPage() {
                   </div>
                 )}
               </CardHeader>
-              
+
               <CardContent className="flex-grow overflow-y-auto p-4 space-y-4">
                 {isLoadingMessages ? (
                   <div className="flex justify-center py-4">
@@ -366,27 +392,37 @@ export default function DaswosAIPage() {
                   </div>
                 )}
               </CardContent>
-              
+
               <CardFooter className="border-t p-4">
-                <form onSubmit={handleSendMessage} className="flex w-full gap-2">
-                  <Input
-                    value={userInput}
-                    onChange={(e) => setUserInput(e.target.value)}
-                    placeholder="Type a message..."
-                    className="flex-grow"
-                    disabled={sendMessageMutation.isPending}
-                  />
-                  <Button
-                    type="submit"
-                    disabled={!userInput.trim() || sendMessageMutation.isPending}
-                  >
-                    {sendMessageMutation.isPending ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Send className="h-4 w-4" />
-                    )}
-                  </Button>
-                </form>
+                <div className="w-full">
+                  {hasWorkspaceItems() && (
+                    <div className="flex items-center mb-2 text-xs text-muted-foreground">
+                      <Briefcase className="h-3 w-3 mr-1" />
+                      <span>
+                        {workspaceItemCount} {workspaceItemCount === 1 ? 'item' : 'items'} from your workspace will be included
+                      </span>
+                    </div>
+                  )}
+                  <form onSubmit={handleSendMessage} className="flex w-full gap-2">
+                    <Input
+                      value={userInput}
+                      onChange={(e) => setUserInput(e.target.value)}
+                      placeholder="Type a message..."
+                      className="flex-grow"
+                      disabled={sendMessageMutation.isPending}
+                    />
+                    <Button
+                      type="submit"
+                      disabled={!userInput.trim() || sendMessageMutation.isPending}
+                    >
+                      {sendMessageMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Send className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </form>
+                </div>
               </CardFooter>
             </Card>
           )}

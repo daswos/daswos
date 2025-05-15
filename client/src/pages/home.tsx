@@ -10,7 +10,10 @@ import FeatureAwareSphereToggle from '@/components/feature-aware-sphere-toggle';
 import FeatureAwareAiSearchToggle from '@/components/feature-aware-ai-search-toggle';
 import FeatureAwareSuperSafeToggle from '@/components/feature-aware-super-safe-toggle';
 import RobotIcon from '@/components/robot-icon';
+import CategoryShoppingDialog from '@/components/category-shopping-dialog';
 import PhotoSelector from '@/components/photo-selector';
+import ResizableImage from '@/components/resizable-image';
+import MovableSearchInterface from '@/components/movable-search-interface';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 
@@ -24,12 +27,43 @@ const Home: React.FC = () => {
   // Photo selector state
   const [isPhotoSelectorOpen, setIsPhotoSelectorOpen] = useState(false);
   const [backgroundPhoto, setBackgroundPhoto] = useState<string | null>(null);
+  const [imageWidth, setImageWidth] = useState<number>(200);
+  const [imageHeight, setImageHeight] = useState<number>(150);
+  const [imageX, setImageX] = useState<number>(50);
+  const [imageY, setImageY] = useState<number>(100);
 
-  // Load saved background photo from localStorage on component mount
+  // Load saved background photo and dimensions from localStorage on component mount
   useEffect(() => {
     const savedPhoto = localStorage.getItem('daswos-background-photo');
-    if (savedPhoto) {
+    const savedWidth = localStorage.getItem('daswos-background-photo-width');
+    const savedHeight = localStorage.getItem('daswos-background-photo-height');
+    const savedX = localStorage.getItem('daswos-background-photo-x');
+    const savedY = localStorage.getItem('daswos-background-photo-y');
+
+    // Only set background photo if it's not the blue background
+    if (savedPhoto &&
+        !savedPhoto.includes('stock-photo-1.svg') &&
+        !savedPhoto.includes('blue-background.svg')) {
       setBackgroundPhoto(savedPhoto);
+    } else {
+      // If it's the blue background, remove it from localStorage
+      localStorage.removeItem('daswos-background-photo');
+    }
+
+    if (savedWidth) {
+      setImageWidth(parseInt(savedWidth, 10));
+    }
+
+    if (savedHeight) {
+      setImageHeight(parseInt(savedHeight, 10));
+    }
+
+    if (savedX) {
+      setImageX(parseInt(savedX, 10));
+    }
+
+    if (savedY) {
+      setImageY(parseInt(savedY, 10));
     }
   }, []);
 
@@ -47,6 +81,9 @@ const Home: React.FC = () => {
 
   // State for showing/hiding the AutoShop dropdown - default to true when AI is enabled
   const [showAutoShop, setShowAutoShop] = useState(aiModeEnabled);
+
+  // State for SuperSafe
+  const [superSafeActive, setSuperSafeActive] = useState(true);
   // State for the AI conversation flow
   const [isAskingIfShopping, setIsAskingIfShopping] = useState(false);
   const [currentQuery, setCurrentQuery] = useState('');
@@ -130,6 +167,16 @@ const Home: React.FC = () => {
     setBackgroundPhoto(photoUrl);
     localStorage.setItem('daswos-background-photo', photoUrl);
 
+    // Reset dimensions and position to default when selecting a new photo
+    setImageWidth(200);
+    setImageHeight(150);
+    setImageX(50);
+    setImageY(100);
+    localStorage.setItem('daswos-background-photo-width', '200');
+    localStorage.setItem('daswos-background-photo-height', '150');
+    localStorage.setItem('daswos-background-photo-x', '50');
+    localStorage.setItem('daswos-background-photo-y', '100');
+
     toast({
       title: "Background updated",
       description: "Your home page background has been updated.",
@@ -145,11 +192,31 @@ const Home: React.FC = () => {
   const handleRemoveBackground = () => {
     setBackgroundPhoto(null);
     localStorage.removeItem('daswos-background-photo');
+    localStorage.removeItem('daswos-background-photo-width');
+    localStorage.removeItem('daswos-background-photo-height');
+    localStorage.removeItem('daswos-background-photo-x');
+    localStorage.removeItem('daswos-background-photo-y');
 
     toast({
       title: "Background removed",
       description: "Your home page background has been removed.",
     });
+  };
+
+  // Handle image resize
+  const handleImageResize = (width: number, height: number) => {
+    setImageWidth(width);
+    setImageHeight(height);
+    localStorage.setItem('daswos-background-photo-width', width.toString());
+    localStorage.setItem('daswos-background-photo-height', height.toString());
+  };
+
+  // Handle image move
+  const handleImageMove = (x: number, y: number) => {
+    setImageX(x);
+    setImageY(y);
+    localStorage.setItem('daswos-background-photo-x', x.toString());
+    localStorage.setItem('daswos-background-photo-y', y.toString());
   };
 
   // Handle initial search - always ask if shopping regardless of AI mode
@@ -372,197 +439,78 @@ const Home: React.FC = () => {
       <div
         className="relative bg-[#E0E0E0] dark:bg-[#222222] pt-12 pb-8 flex-grow flex items-center justify-center"
       >
+        {/* Background photo */}
+        {backgroundPhoto && (
+          <ResizableImage
+            src={backgroundPhoto}
+            alt="Background"
+            initialWidth={imageWidth}
+            initialHeight={imageHeight}
+            initialX={imageX}
+            initialY={imageY}
+            minWidth={50}
+            minHeight={50}
+            maxWidth={400}
+            maxHeight={300}
+            preserveAspectRatio={false}
+            onResize={handleImageResize}
+            onMove={handleImageMove}
+            className="border border-gray-200 dark:border-gray-700"
+          />
+        )}
+
+        {/* Movable Search Interface */}
+        <MovableSearchInterface
+          onSearch={handleInitialSearch}
+          aiModeEnabled={aiModeEnabled}
+          onToggleAi={(enabled) => setAiModeEnabled(enabled)}
+          activeSphere={activeSphere}
+          onSphereChange={handleSphereChange}
+          superSafeActive={superSafeActive}
+          onToggleSuperSafe={(active) => setSuperSafeActive(active)}
+        />
+
         <div className="container mx-auto px-4 max-w-6xl">
-          <div className="flex flex-col md:flex-row items-center justify-center gap-10 md:gap-16">
-            {/* Left side - Photo container */}
-            <div className="w-full md:w-1/4 relative md:mt-0">
-              <div className="text-xs text-gray-500 dark:text-gray-400 mb-1 ml-1">Background Image</div>
-              <div
-                className={`aspect-video w-full rounded-lg relative ${backgroundPhoto ? '' : 'border border-gray-300 dark:border-gray-700'} overflow-hidden shadow-md`}
-              >
-                {backgroundPhoto ? (
-                  <div
-                    className="w-full h-full"
-                    style={{
-                      backgroundImage: `url(${backgroundPhoto})`,
-                      backgroundSize: 'cover',
-                      backgroundPosition: 'center',
-                      backgroundRepeat: 'no-repeat'
-                    }}
-                  ></div>
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center bg-gray-100 dark:bg-gray-800/30">
-                    <Image className="h-8 w-8 text-gray-400 opacity-50" />
-                  </div>
-                )}
-
-                {/* Photo selector button - positioned at the bottom right of the photo container */}
-                <div className="absolute bottom-2 right-2 z-10 flex space-x-1 opacity-70 hover:opacity-100 transition-opacity">
-                  <button
-                    onClick={handleOpenPhotoSelector}
-                    className="bg-white/80 dark:bg-gray-800/80 p-1.5 rounded-full shadow-sm hover:bg-white dark:hover:bg-gray-800 transition-colors"
-                    title="Change background"
-                  >
-                    <Image className="h-3.5 w-3.5 text-gray-700 dark:text-gray-300" />
-                  </button>
-
-                  {/* Remove background button - only shown when a background is set */}
-                  {backgroundPhoto && (
-                    <button
-                      onClick={handleRemoveBackground}
-                      className="bg-white/80 dark:bg-gray-800/80 p-1.5 rounded-full shadow-sm hover:bg-white dark:hover:bg-gray-800 transition-colors"
-                      title="Remove background"
-                    >
-                      <X className="h-3.5 w-3.5 text-gray-700 dark:text-gray-300" />
-                    </button>
-                  )}
-                </div>
-              </div>
+          <div className="flex flex-col md:flex-row items-start justify-start gap-6 md:gap-8">
+            {/* Empty div to maintain layout */}
+            <div className="w-full md:w-1/4 md:mt-0 pt-2">
             </div>
 
-            {/* Right side - Logo and search */}
-            <div className="w-full md:w-1/2 flex flex-col items-center justify-center mx-auto">
-              {/* Logo with Theme Toggle */}
-              <div className="flex flex-col items-center justify-center logo-container mb-2 w-full">
-                <div className="relative inline-block mx-auto">
-                  <div className="px-16 py-1 flex justify-center">
-                    <DasWosLogo height={70} width="auto" className="mx-auto" />
-                  </div>
-                  {/* Theme Toggle Button */}
-                  <button
-                    onClick={toggleTheme}
-                    className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-transparent flex items-center justify-center w-6 h-6 text-xs rounded-full"
-                    aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-                  >
-                    {theme === "dark" ? (
-                      <Sun className="h-4 w-4 text-yellow-500" />
-                    ) : (
-                      <Moon className="h-4 w-4 text-gray-700 dark:text-gray-300" />
-                    )}
-                  </button>
-                </div>
+            {/* Content area for AI conversation */}
+            <div className="w-full md:w-1/2 flex flex-col items-start justify-start">
 
-                {/* Animated Trust Heading */}
-                <div className="mt-0 mb-2 w-full text-center">
-                  <AnimatedTrustText
-                    sentences={[
-                      "Helping you find what you need with confidence."
-                    ]}
-                    duration={5000}
-                  />
-                </div>
-              </div>
-
-              {/* Search */}
-              <div className="w-full max-w-xl mx-auto mb-4">
+              {/* AI Conversation Area */}
+              <div className="w-full max-w-xl mb-4">
                 {isAskingIfShopping ? (
-                  <div className="text-center">
-                    <div className="bg-blue-50 dark:bg-blue-900 border border-blue-300 dark:border-blue-700 rounded-lg p-4 mb-4">
-                      <h3 className="text-lg font-medium text-blue-900 dark:text-blue-100 mb-2">Are you shopping?</h3>
-                      <p className="text-sm text-blue-800 dark:text-blue-200 mb-3">
-                        You searched for: <span className="font-medium">{currentQuery}</span>
-                      </p>
-                      <div className="flex justify-center gap-4">
-                        <Button
-                          onClick={() => handleShoppingResponse(true)}
-                          variant="outline"
-                          className="flex items-center gap-2 border-green-500 text-green-700 hover:bg-green-50 dark:border-green-400 dark:text-green-400 dark:hover:bg-green-900"
-                        >
-                          <Check className="h-4 w-4" />
-                          Yes
-                        </Button>
-                        <Button
-                          onClick={() => handleShoppingResponse(false)}
-                          variant="outline"
-                          className="flex items-center gap-2 border-gray-500 text-gray-700 hover:bg-gray-50 dark:border-gray-400 dark:text-gray-400 dark:hover:bg-gray-900"
-                        >
-                          <X className="h-4 w-4" />
-                          No
-                        </Button>
-                      </div>
-                      <div className="mt-4 pt-3 border-t border-blue-200 dark:border-blue-700">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            // Reset conversation state
-                            setIsAiConversationActive(false);
-                            setIsAskingIfShopping(false);
-                            setConversationHistory([]);
-                            setCurrentQuery('');
-                            setAiResponse(null);
-                            // Focus the search input
-                            if (searchInputRef.current) {
-                              searchInputRef.current.focus();
-                            }
-                          }}
-                          className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
-                        >
-                          Cancel and start a new search
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <form onSubmit={(e) => {
-                    e.preventDefault();
-                    const searchInput = e.currentTarget.querySelector('input') as HTMLInputElement;
-                    const query = searchInput?.value;
-                    if (query?.trim()) {
-                      if (aiModeEnabled && isAiConversationActive) {
-                        // Continue the AI conversation if already active
-                        handleAiConversation(query);
-                      } else {
-                        // Always ask if shopping first, regardless of AI mode
-                        handleInitialSearch(query);
+                  <CategoryShoppingDialog
+                    query={currentQuery}
+                    onYes={() => handleShoppingResponse(true)}
+                    onNo={() => handleShoppingResponse(false)}
+                    onCancel={() => {
+                      // Reset conversation state
+                      setIsAiConversationActive(false);
+                      setIsAskingIfShopping(false);
+                      setConversationHistory([]);
+                      setCurrentQuery('');
+                      setAiResponse(null);
+                      // Focus the search input
+                      if (searchInputRef.current) {
+                        searchInputRef.current.focus();
                       }
-                    }
-                  }} className="flex flex-col space-y-2">
-                    <div className="relative flex">
-                      <input
-                        type="text"
-                        placeholder={aiModeEnabled
-                          ? (isAiConversationActive
-                              ? searchPlaceholder || "Type your response here..."
-                              : "Ask Daswos...")
-                          : "What are you looking for?"}
-                        value={currentQuery}
-                        onChange={(e) => setCurrentQuery(e.target.value)}
-                        className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 text-black dark:text-white ${
-                          aiModeEnabled
-                            ? 'bg-blue-50 dark:bg-blue-900 border-blue-300 dark:border-blue-700'
-                            : 'bg-white dark:bg-[#222222]'
-                        } focus:outline-none`}
-                        ref={searchInputRef}
-                        disabled={isAiLoading}
-                      />
-                      <button
-                        type="submit"
-                        className={`border border-l-0 px-4 search-button ${
-                          aiModeEnabled
-                            ? 'bg-blue-50 dark:bg-blue-900 border-blue-300 dark:border-blue-700'
-                            : 'bg-white dark:bg-[#333333] border-gray-300 dark:border-gray-600'
-                        }`}
-                        disabled={isAiLoading}
-                      >
-                        {isAiLoading ? (
-                          <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
-                        ) : aiModeEnabled ? (
-                          <RobotIcon className="text-blue-600 dark:text-blue-400" size={22} />
-                        ) : (
-                          <Search className="h-5 w-5 text-black dark:text-white" />
-                        )}
-                      </button>
-                    </div>
+                    }}
+                  />
+                ) : (
+                  <div className="flex flex-col space-y-2">
 
-                    {/* Small control buttons below search bar */}
+                    {/* Control buttons for AI conversation */}
                     {aiModeEnabled && isAiConversationActive && !isAskingIfShopping && (
-                      <div className="flex justify-between items-center mt-2 text-xs">
+                      <div className="flex justify-between items-center mt-2 p-2 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
                         <div className="flex items-center space-x-3">
                           {/* Mode toggle */}
                           <button
                             type="button"
                             onClick={() => setSearchType(searchType === 'shopping' ? 'information' : 'shopping')}
-                            className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 flex items-center"
+                            className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 flex items-center text-xs"
                             title={`Switch to ${searchType === 'shopping' ? 'information' : 'shopping'} mode`}
                           >
                             <span className={`inline-block w-2 h-2 rounded-full mr-1 ${searchType === 'shopping' ? 'bg-green-500' : 'bg-blue-500'}`}></span>
@@ -579,24 +527,20 @@ const Home: React.FC = () => {
                               setCurrentQuery('');
                               setAiResponse(null);
                               setSearchPlaceholder('');
-                              // Focus the search input
-                              if (searchInputRef.current) {
-                                searchInputRef.current.focus();
-                              }
                             }}
-                            className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 flex items-center"
+                            className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 flex items-center text-xs"
                           >
                             <X className="h-3 w-3 mr-1" />
                             New search
                           </button>
                         </div>
 
-                        {/* Speak button - only visible when hovering */}
+                        {/* Speak button */}
                         {aiResponse && aiResponse.hasAudio && (
                           <button
                             type="button"
                             onClick={() => speakText(aiResponse.text)}
-                            className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 flex items-center opacity-70 hover:opacity-100"
+                            className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 flex items-center text-xs"
                             title="Speak the AI's response"
                           >
                             <Volume2 className="h-3 w-3 mr-1" />
@@ -605,28 +549,11 @@ const Home: React.FC = () => {
                         )}
                       </div>
                     )}
-                  </form>
+                  </div>
                 )}
               </div>
 
-              {/* Essential toggles for search functionality */}
-              <div className="flex flex-col items-center justify-center mb-6 w-full max-w-xl mx-auto">
-                <div className="flex flex-row items-center justify-center gap-3 mb-2">
-                  <FeatureAwareSphereToggle
-                    activeSphere={activeSphere}
-                    onChange={handleSphereChange}
-                  />
-                  <div className="flex flex-col items-center">
-                    <FeatureAwareAiSearchToggle
-                      isEnabled={aiModeEnabled}
-                      onToggle={(enabled) => setAiModeEnabled(enabled)}
-                      showDropdown={showAutoShop}
-                      onDropdownToggle={() => setShowAutoShop(!showAutoShop)}
-                    />
-                  </div>
-                  <FeatureAwareSuperSafeToggle />
-                </div>
-              </div>
+              {/* Removed feature toggles as they're now in the movable search interface */}
             </div>
           </div>
         </div>

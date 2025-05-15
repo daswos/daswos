@@ -14,6 +14,8 @@ import SafeSphereProvider from "@/contexts/safe-sphere-context";
 import SuperSafeProvider from "@/contexts/super-safe-context";
 import { AutoShopProvider } from "@/contexts/autoshop-context";
 import { DasbarProvider } from "@/contexts/dasbar-context";
+import { WorkspaceProvider } from "@/components/workspace/workspace-context";
+import Workspace from "@/components/workspace/workspace";
 import { ThemeProvider } from "@/providers/theme-provider";
 import { Loader2 } from "lucide-react";
 
@@ -36,6 +38,7 @@ function Router() {
             <Home />
           </main>
           <NavigationBar />
+          <Workspace />
         </Route>
 
         <Route>
@@ -62,6 +65,7 @@ function Router() {
             </Switch>
           </main>
           <NavigationBar />
+          <Workspace />
         </Route>
       </Switch>
     </div>
@@ -77,8 +81,10 @@ function App() {
             <SuperSafeProvider>
               <AutoShopProvider>
                 <DasbarProvider>
-                  <Router />
-                  <Toaster />
+                  <WorkspaceProvider>
+                    <Router />
+                    <Toaster />
+                  </WorkspaceProvider>
                 </DasbarProvider>
               </AutoShopProvider>
             </SuperSafeProvider>

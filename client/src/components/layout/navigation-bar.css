@@ -1,56 +1,121 @@
 /* Navigation Bar Styles */
 
-.dasbar {
-  width: 100%;
-  height: 50px;
-  bottom: 0;
-  left: 0;
-  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
-}
-
 .nav-button {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0 15px;
   height: 40px;
-  border-radius: 6px;
-  margin: 0 4px;
-  cursor: pointer;
+  width: 40px;
+  padding: 0;
   transition: all 0.2s ease;
+  z-index: 1001;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+}
+
+/* Home logo button styling */
+.home-logo-button {
+  background-color: black;
+  color: white;
+  border-radius: 8px;
+  overflow: visible;
+}
+
+.home-logo-button:hover {
+  background-color: #333;
+}
+
+.home-logo-button .dasbar-logo {
+  height: 24px;
+  width: 24px;
+}
+
+/* Back button styling */
+.back-button {
+  background-color: white;
+  color: #000000;
+  border: 1px solid #d1d5db;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.back-button:hover {
+  background-color: #f3f4f6;
+}
+
+/* Forward button styling */
+.forward-button {
+  background-color: white;
+  color: #000000;
+  border: 1px solid #d1d5db;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.forward-button:hover {
+  background-color: #f3f4f6;
+}
+
+/* Dasbar item styling */
+.dasbar-item {
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  position: relative;
+}
+
+.dasbar-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.dasbar-item::after {
+  content: attr(title);
+  position: absolute;
+  left: 50px;
+  top: 50%;
+  transform: translateY(-50%);
+  background-color: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
   white-space: nowrap;
-  border: none;
-  background: transparent;
-  min-width: 40px;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.2s ease;
+  pointer-events: none;
 }
 
-.nav-button:hover {
-  background-color: rgba(0, 0, 0, 0.05);
+.dasbar-item:hover::after {
+  opacity: 1;
+  visibility: visible;
 }
 
-.dark .nav-button:hover {
-  background-color: rgba(255, 255, 255, 0.1);
+/* Dark mode styles */
+.dark .back-button,
+.dark .forward-button {
+  background-color: #333333;
+  color: #ffffff;
+  border-color: #4b5563;
 }
 
-.nav-button span {
-  margin-left: 6px;
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.home-button {
-  font-weight: 600;
+.dark .back-button:hover,
+.dark .forward-button:hover {
+  background-color: #4b5563;
 }
 
 /* Responsive adjustments */
-@media (max-width: 768px) {
-  .nav-button span {
-    display: none;
+@media (max-width: 640px) {
+  .nav-button {
+    height: 36px;
+    width: 36px;
   }
 
-  .nav-button {
-    padding: 0 10px;
-    margin: 0 2px;
-    min-width: 36px;
+  .dasbar-item {
+    height: 36px !important;
+    width: 36px !important;
   }
 }
