@@ -13,6 +13,7 @@ import { AuthProvider } from "@/hooks/use-auth";
 import SafeSphereProvider from "@/contexts/safe-sphere-context";
 import SuperSafeProvider from "@/contexts/super-safe-context";
 import { AutoShopProvider } from "@/contexts/autoshop-context";
+import { AutoShopProvider as GlobalAutoShopProvider } from "@/contexts/global-autoshop-context";
 import { DasbarProvider } from "@/contexts/dasbar-context";
 import { WorkspaceProvider } from "@/components/workspace/workspace-context";
 import Workspace from "@/components/workspace/workspace";
@@ -53,15 +54,17 @@ function App() {
         <AuthProvider>
           <SafeSphereProvider>
             <SuperSafeProvider>
-              <AutoShopProvider>
-                <DasbarProvider>
-                  <WorkspaceProvider>
-                    <Router />
-                    <GlobalAutoShopTimer />
-                    <Toaster />
-                  </WorkspaceProvider>
-                </DasbarProvider>
-              </AutoShopProvider>
+              <GlobalAutoShopProvider>
+                <AutoShopProvider>
+                  <DasbarProvider>
+                    <WorkspaceProvider>
+                      <Router />
+                      <GlobalAutoShopTimer />
+                      <Toaster />
+                    </WorkspaceProvider>
+                  </DasbarProvider>
+                </AutoShopProvider>
+              </GlobalAutoShopProvider>
             </SuperSafeProvider>
           </SafeSphereProvider>
         </AuthProvider>

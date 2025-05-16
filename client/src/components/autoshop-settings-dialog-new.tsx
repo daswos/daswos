@@ -37,8 +37,8 @@ const AVAILABLE_CATEGORIES = [
 
 const DEFAULT_SETTINGS: AutoShopSettings = {
   maxTotalCoins: 5000,
-  minItemPrice: 5000,  // 50 dollars in cents
-  maxItemPrice: 25000, // 250 dollars in cents
+  minItemPrice: 50,  // 50 dollars
+  maxItemPrice: 250, // 250 dollars
   duration: {
     value: 30,
     unit: 'minutes'
@@ -298,11 +298,11 @@ const AutoShopSettingsDialogNew: React.FC<AutoShopSettingsDialogProps> = ({
                           id="min-item-price"
                           type="number"
                           min={1}
-                          max={(settings.maxItemPrice / 100) - 1}
-                          value={settings.minItemPrice / 100}
+                          max={settings.maxItemPrice - 1}
+                          value={settings.minItemPrice}
                           onChange={(e) => setSettings({
                             ...settings,
-                            minItemPrice: Math.min(parseInt(e.target.value) * 100 || 100, settings.maxItemPrice - 100)
+                            minItemPrice: Math.min(parseInt(e.target.value) || 1, settings.maxItemPrice - 1)
                           })}
                           className={`w-full rounded-md border p-2 text-sm bg-white/70 backdrop-blur-sm ${errors.minItemPrice ? 'border-red-500' : 'border-gray-300'}`}
                         />
@@ -317,12 +317,12 @@ const AutoShopSettingsDialogNew: React.FC<AutoShopSettingsDialogProps> = ({
                         <input
                           id="max-item-price"
                           type="number"
-                          min={(settings.minItemPrice / 100) + 1}
-                          max={settings.maxTotalCoins / 100}
-                          value={settings.maxItemPrice / 100}
+                          min={settings.minItemPrice + 1}
+                          max={settings.maxTotalCoins}
+                          value={settings.maxItemPrice}
                           onChange={(e) => setSettings({
                             ...settings,
-                            maxItemPrice: Math.max(parseInt(e.target.value) * 100 || settings.minItemPrice + 100, settings.minItemPrice + 100)
+                            maxItemPrice: Math.max(parseInt(e.target.value) || settings.minItemPrice + 1, settings.minItemPrice + 1)
                           })}
                           className={`w-full rounded-md border p-2 text-sm bg-white/70 backdrop-blur-sm ${errors.maxItemPrice ? 'border-red-500' : 'border-gray-300'}`}
                         />

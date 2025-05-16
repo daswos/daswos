@@ -3,6 +3,8 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { initializeDatabase } from "./init-db";
 import apiRoutes from "./routes/index";
+import { AutoShopService } from "./services/autoshop-service";
+import { storage } from "./storage";
 
 // Initialize express application
 const app = express();
@@ -50,6 +52,19 @@ app.use((req, res, next) => {
   } catch (error) {
     log(`Database initialization error: ${error}`, 'error');
     // Continue with server startup even if DB init fails
+  }
+
+  // Initialize AutoShop service
+  try {
+    const autoShopService = new AutoShopService(storage);
+    await autoShopService.initialize();
+    log('AutoShop service initialized');
+
+    // Make the service available globally
+    (global as any).autoShopService = autoShopService;
+  } catch (error) {
+    log(`AutoShop service initialization error: ${error}`, 'error');
+    // Continue with server startup even if AutoShop init fails
   }
 
   const server = await registerRoutes(app);

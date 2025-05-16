@@ -322,6 +322,74 @@ export class FallbackStorage implements IStorage {
       lastUpdated: new Date()
     };
   }
+
+  // AutoShop operations
+  private autoShopStatus: Map<string, any> = new Map();
+  private autoShopSettings: Map<string, any> = new Map();
+  private autoShopPendingItems: Map<string, any[]> = new Map();
+  private autoShopOrderHistory: Map<string, any[]> = new Map();
+
+  async getAutoShopStatus(userId: string | number): Promise<any> {
+    const key = userId.toString();
+    return this.autoShopStatus.get(key) || { active: false };
+  }
+
+  async setAutoShopStatus(userId: string | number, status: any): Promise<boolean> {
+    const key = userId.toString();
+    this.autoShopStatus.set(key, status);
+    return true;
+  }
+
+  async getAutoShopSettings(userId: string | number): Promise<any> {
+    const key = userId.toString();
+    return this.autoShopSettings.get(key) || null;
+  }
+
+  async setAutoShopSettings(userId: string | number, settings: any): Promise<boolean> {
+    const key = userId.toString();
+    this.autoShopSettings.set(key, settings);
+    return true;
+  }
+
+  async getAutoShopPendingItems(userId: string | number): Promise<any[]> {
+    const key = userId.toString();
+    return this.autoShopPendingItems.get(key) || [];
+  }
+
+  async addAutoShopItem(userId: string | number, item: any): Promise<boolean> {
+    const key = userId.toString();
+    const items = this.autoShopPendingItems.get(key) || [];
+    items.push(item);
+    this.autoShopPendingItems.set(key, items);
+    return true;
+  }
+
+  async removeAutoShopItem(userId: string | number, itemId: string): Promise<boolean> {
+    const key = userId.toString();
+    const items = this.autoShopPendingItems.get(key) || [];
+    const updatedItems = items.filter(item => item.id !== itemId);
+    this.autoShopPendingItems.set(key, updatedItems);
+    return true;
+  }
+
+  async clearAutoShopItems(userId: string | number): Promise<boolean> {
+    const key = userId.toString();
+    this.autoShopPendingItems.set(key, []);
+    return true;
+  }
+
+  async getAutoShopOrderHistory(userId: string | number): Promise<any[]> {
+    const key = userId.toString();
+    return this.autoShopOrderHistory.get(key) || [];
+  }
+
+  async addAutoShopOrderHistoryItem(userId: string | number, item: any): Promise<boolean> {
+    const key = userId.toString();
+    const items = this.autoShopOrderHistory.get(key) || [];
+    items.push(item);
+    this.autoShopOrderHistory.set(key, items);
+    return true;
+  }
 }
 
 // Create an instance of the fallback storage to use when needed
@@ -384,6 +452,18 @@ export interface IStorage {
 
   getUserProductPreferences(userId: number): Promise<any[]>;
   updateUserProductPreference(userId: number, categoryId: number, preferenceScore: number): Promise<any>;
+
+  // AutoShop operations
+  getAutoShopStatus(userId: string | number): Promise<any>;
+  setAutoShopStatus(userId: string | number, status: any): Promise<boolean>;
+  getAutoShopSettings(userId: string | number): Promise<any>;
+  setAutoShopSettings(userId: string | number, settings: any): Promise<boolean>;
+  getAutoShopPendingItems(userId: string | number): Promise<any[]>;
+  addAutoShopItem(userId: string | number, item: any): Promise<boolean>;
+  removeAutoShopItem(userId: string | number, itemId: string): Promise<boolean>;
+  clearAutoShopItems(userId: string | number): Promise<boolean>;
+  getAutoShopOrderHistory(userId: string | number): Promise<any[]>;
+  addAutoShopOrderHistoryItem(userId: string | number, item: any): Promise<boolean>;
 }
 
 // Database storage implementation
@@ -3426,6 +3506,171 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  // AutoShop operations
+  async getAutoShopStatus(userId: string | number): Promise<any> {
+    try {
+      // Convert userId to string for consistent handling
+      const userIdStr = userId.toString();
+
+      // Check if we have a status in the app_settings table
+      const settingKey = `autoshop_status_${userIdStr}`;
+      const status = await this.getAppSettings(settingKey);
+
+      return status || { active: false };
+    } catch (error) {
+      console.error(`Error getting AutoShop status for user ${userId}:`, error);
+      return { active: false };
+    }
+  }
+
+  async setAutoShopStatus(userId: string | number, status: any): Promise<boolean> {
+    try {
+      // Convert userId to string for consistent handling
+      const userIdStr = userId.toString();
+
+      // Store status in the app_settings table
+      const settingKey = `autoshop_status_${userIdStr}`;
+      return await this.setAppSettings(settingKey, status);
+    } catch (error) {
+      console.error(`Error setting AutoShop status for user ${userId}:`, error);
+      return false;
+    }
+  }
+
+  async getAutoShopSettings(userId: string | number): Promise<any> {
+    try {
+      // Convert userId to string for consistent handling
+      const userIdStr = userId.toString();
+
+      // Check if we have settings in the app_settings table
+      const settingKey = `autoshop_settings_${userIdStr}`;
+      return await this.getAppSettings(settingKey);
+    } catch (error) {
+      console.error(`Error getting AutoShop settings for user ${userId}:`, error);
+      return null;
+    }
+  }
+
+  async setAutoShopSettings(userId: string | number, settings: any): Promise<boolean> {
+    try {
+      // Convert userId to string for consistent handling
+      const userIdStr = userId.toString();
+
+      // Store settings in the app_settings table
+      const settingKey = `autoshop_settings_${userIdStr}`;
+      return await this.setAppSettings(settingKey, settings);
+    } catch (error) {
+      console.error(`Error setting AutoShop settings for user ${userId}:`, error);
+      return false;
+    }
+  }
+
+  async getAutoShopPendingItems(userId: string | number): Promise<any[]> {
+    try {
+      // Convert userId to string for consistent handling
+      const userIdStr = userId.toString();
+
+      // Check if we have pending items in the app_settings table
+      const settingKey = `autoshop_pending_items_${userIdStr}`;
+      const items = await this.getAppSettings(settingKey);
+
+      return items || [];
+    } catch (error) {
+      console.error(`Error getting AutoShop pending items for user ${userId}:`, error);
+      return [];
+    }
+  }
+
+  async addAutoShopItem(userId: string | number, item: any): Promise<boolean> {
+    try {
+      // Convert userId to string for consistent handling
+      const userIdStr = userId.toString();
+
+      // Get current pending items
+      const settingKey = `autoshop_pending_items_${userIdStr}`;
+      const currentItems = await this.getAppSettings(settingKey) || [];
+
+      // Add the new item
+      currentItems.push(item);
+
+      // Store updated items
+      return await this.setAppSettings(settingKey, currentItems);
+    } catch (error) {
+      console.error(`Error adding AutoShop item for user ${userId}:`, error);
+      return false;
+    }
+  }
+
+  async removeAutoShopItem(userId: string | number, itemId: string): Promise<boolean> {
+    try {
+      // Convert userId to string for consistent handling
+      const userIdStr = userId.toString();
+
+      // Get current pending items
+      const settingKey = `autoshop_pending_items_${userIdStr}`;
+      const currentItems = await this.getAppSettings(settingKey) || [];
+
+      // Remove the item
+      const updatedItems = currentItems.filter((item: any) => item.id !== itemId);
+
+      // Store updated items
+      return await this.setAppSettings(settingKey, updatedItems);
+    } catch (error) {
+      console.error(`Error removing AutoShop item for user ${userId}:`, error);
+      return false;
+    }
+  }
+
+  async clearAutoShopItems(userId: string | number): Promise<boolean> {
+    try {
+      // Convert userId to string for consistent handling
+      const userIdStr = userId.toString();
+
+      // Clear pending items
+      const settingKey = `autoshop_pending_items_${userIdStr}`;
+      return await this.setAppSettings(settingKey, []);
+    } catch (error) {
+      console.error(`Error clearing AutoShop items for user ${userId}:`, error);
+      return false;
+    }
+  }
+
+  async getAutoShopOrderHistory(userId: string | number): Promise<any[]> {
+    try {
+      // Convert userId to string for consistent handling
+      const userIdStr = userId.toString();
+
+      // Check if we have order history in the app_settings table
+      const settingKey = `autoshop_order_history_${userIdStr}`;
+      const history = await this.getAppSettings(settingKey);
+
+      return history || [];
+    } catch (error) {
+      console.error(`Error getting AutoShop order history for user ${userId}:`, error);
+      return [];
+    }
+  }
+
+  async addAutoShopOrderHistoryItem(userId: string | number, item: any): Promise<boolean> {
+    try {
+      // Convert userId to string for consistent handling
+      const userIdStr = userId.toString();
+
+      // Get current order history
+      const settingKey = `autoshop_order_history_${userIdStr}`;
+      const currentHistory = await this.getAppSettings(settingKey) || [];
+
+      // Add the new item
+      currentHistory.push(item);
+
+      // Store updated history
+      return await this.setAppSettings(settingKey, currentHistory);
+    } catch (error) {
+      console.error(`Error adding AutoShop order history item for user ${userId}:`, error);
+      return false;
+    }
+  }
+
   // Family invitation code operations
   async createFamilyInvitationCode(ownerId: number, email?: string, expiresInDays: number = 7): Promise<FamilyInvitationCode> {
     try {
@@ -4111,6 +4356,87 @@ export class HybridStorage implements IStorage {
       'generateAiRecommendations',
       () => this.primaryStorage.generateAiRecommendations(userId, searchQuery, isBulkBuy, searchHistory, shoppingList),
       () => this.fallbackStorage.generateAiRecommendations(userId, searchQuery, isBulkBuy, searchHistory, shoppingList)
+    );
+  }
+
+  // AutoShop operations
+  async getAutoShopStatus(userId: string | number): Promise<any> {
+    return this.executeWithFallback(
+      'getAutoShopStatus',
+      () => this.primaryStorage.getAutoShopStatus(userId),
+      () => this.fallbackStorage.getAutoShopStatus(userId)
+    );
+  }
+
+  async setAutoShopStatus(userId: string | number, status: any): Promise<boolean> {
+    return this.executeWithFallback(
+      'setAutoShopStatus',
+      () => this.primaryStorage.setAutoShopStatus(userId, status),
+      () => this.fallbackStorage.setAutoShopStatus(userId, status)
+    );
+  }
+
+  async getAutoShopSettings(userId: string | number): Promise<any> {
+    return this.executeWithFallback(
+      'getAutoShopSettings',
+      () => this.primaryStorage.getAutoShopSettings(userId),
+      () => this.fallbackStorage.getAutoShopSettings(userId)
+    );
+  }
+
+  async setAutoShopSettings(userId: string | number, settings: any): Promise<boolean> {
+    return this.executeWithFallback(
+      'setAutoShopSettings',
+      () => this.primaryStorage.setAutoShopSettings(userId, settings),
+      () => this.fallbackStorage.setAutoShopSettings(userId, settings)
+    );
+  }
+
+  async getAutoShopPendingItems(userId: string | number): Promise<any[]> {
+    return this.executeWithFallback(
+      'getAutoShopPendingItems',
+      () => this.primaryStorage.getAutoShopPendingItems(userId),
+      () => this.fallbackStorage.getAutoShopPendingItems(userId)
+    );
+  }
+
+  async addAutoShopItem(userId: string | number, item: any): Promise<boolean> {
+    return this.executeWithFallback(
+      'addAutoShopItem',
+      () => this.primaryStorage.addAutoShopItem(userId, item),
+      () => this.fallbackStorage.addAutoShopItem(userId, item)
+    );
+  }
+
+  async removeAutoShopItem(userId: string | number, itemId: string): Promise<boolean> {
+    return this.executeWithFallback(
+      'removeAutoShopItem',
+      () => this.primaryStorage.removeAutoShopItem(userId, itemId),
+      () => this.fallbackStorage.removeAutoShopItem(userId, itemId)
+    );
+  }
+
+  async clearAutoShopItems(userId: string | number): Promise<boolean> {
+    return this.executeWithFallback(
+      'clearAutoShopItems',
+      () => this.primaryStorage.clearAutoShopItems(userId),
+      () => this.fallbackStorage.clearAutoShopItems(userId)
+    );
+  }
+
+  async getAutoShopOrderHistory(userId: string | number): Promise<any[]> {
+    return this.executeWithFallback(
+      'getAutoShopOrderHistory',
+      () => this.primaryStorage.getAutoShopOrderHistory(userId),
+      () => this.fallbackStorage.getAutoShopOrderHistory(userId)
+    );
+  }
+
+  async addAutoShopOrderHistoryItem(userId: string | number, item: any): Promise<boolean> {
+    return this.executeWithFallback(
+      'addAutoShopOrderHistoryItem',
+      () => this.primaryStorage.addAutoShopOrderHistoryItem(userId, item),
+      () => this.fallbackStorage.addAutoShopOrderHistoryItem(userId, item)
     );
   }
 }

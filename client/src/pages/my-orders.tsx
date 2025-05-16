@@ -82,7 +82,7 @@ const MyOrders: React.FC = () => {
       id: '1',
       name: 'Wireless Earbuds',
       description: 'Noise cancelling with long battery life',
-      price: 5000,
+      price: 50,
       imageUrl: 'https://via.placeholder.com/100',
       category: 'Electronics',
       purchasedAt: new Date().toISOString(),
@@ -210,7 +210,7 @@ const MyOrders: React.FC = () => {
                             <span className="text-sm">{formatDasWosCoins(item.price)}</span>
                           </div>
                         ) : (
-                          <span className="text-sm">${(item.price / 100).toFixed(2)}</span>
+                          <span className="text-sm">${item.price.toFixed(2)}</span>
                         )}
                       </div>
                     </div>

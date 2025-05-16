@@ -1,6 +1,4 @@
-import React from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { apiRequest } from '@/lib/queryClient';
+import React, { useState, useEffect, useRef } from 'react';
 import { useDasWosCoins } from '@/hooks/use-daswos-coins';
 import { Bot, ShoppingBag, Clock, Check, X, AlertCircle, Package } from 'lucide-react';
 import { formatDasWosCoins, formatDate } from '@/lib/utils';
@@ -10,64 +8,133 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import AutoShopStartButton from '@/components/autoshop-start-button';
+import { useToast } from '@/hooks/use-toast';
+import { useAutoShop } from '@/contexts/global-autoshop-context';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const AutoShopDashboard: React.FC = () => {
+  const [isClearing, setIsClearing] = useState(false);
+  const [showClearDialog, setShowClearDialog] = useState(false);
+  const { toast } = useToast();
+
   // Get DasWos coins balance
   const { balance: coinsBalance } = useDasWosCoins();
 
-  // Fetch AutoShop pending purchases
-  const { data: pendingItems, isLoading: isPendingLoading } = useQuery({
-    queryKey: ['/api/user/autoshop/pending'],
-    queryFn: async () => {
-      return apiRequest('/api/user/autoshop/pending', {
-        method: 'GET',
-        credentials: 'include'
-      });
-    },
-    // Enable for all users, not just authenticated ones
-    staleTime: 30000, // 30 seconds
-  });
+  // Use the global AutoShop context
+  const {
+    pendingItems,
+    orderHistory,
+    isLoading,
+    removeItem,
+    clearAllItems,
+    refreshItems
+  } = useAutoShop();
 
-  // Fetch AutoShop order history
-  const { data: orderHistory, isLoading: isHistoryLoading } = useQuery({
-    queryKey: ['/api/user/autoshop/history'],
-    queryFn: async () => {
-      return apiRequest('/api/user/autoshop/history', {
-        method: 'GET',
-        credentials: 'include'
-      });
-    },
-    // Enable for all users, not just authenticated ones
-    staleTime: 60000, // 1 minute
-  });
+  // Refresh items only once when the component mounts
+  const hasInitiallyFetched = useRef(false);
+
+  useEffect(() => {
+    // Only refresh if we don't already have data and haven't fetched yet
+    if (!pendingItems?.length && !isLoading && !hasInitiallyFetched.current) {
+      hasInitiallyFetched.current = true;
+      refreshItems();
+    }
+  }, [pendingItems, isLoading, refreshItems]);
 
   // Use empty arrays if data is not available yet
   const displayPendingItems = pendingItems || [];
   const displayOrderHistory = orderHistory || [];
 
+  // Loading states
+  const isPendingLoading = isLoading;
+  const isHistoryLoading = isLoading;
+
   // Function to remove an item from pending purchases
   const handleRemoveItem = async (itemId: string) => {
     try {
-      // Update the recommendation status to 'rejected'
-      await apiRequest(`/api/ai-shopper/recommendations/${itemId}`, {
-        method: 'PUT',
-        credentials: 'include',
-        body: JSON.stringify({
-          status: 'rejected',
-          reason: 'User removed from AutoShop dashboard',
-          removeFromList: true
-        })
-      });
+      // Use the global context to remove the item
+      await removeItem(itemId);
 
-      // Refetch pending items
-      window.location.reload();
+      toast({
+        title: "Item Removed",
+        description: "The item has been removed from your AutoShop list.",
+      });
     } catch (error) {
       console.error('Error removing item:', error);
+      toast({
+        title: "Error",
+        description: "Failed to remove item. Please try again.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  // Function to clear all pending items
+  const handleClearAllItems = () => {
+    setShowClearDialog(true);
+  };
+
+  // Function to confirm clearing all items
+  const confirmClearAllItems = async () => {
+    setIsClearing(true);
+    try {
+      // Use the global context to clear all items
+      await clearAllItems();
+
+      toast({
+        title: "Items Cleared",
+        description: "All items have been removed from your AutoShop list.",
+      });
+    } catch (error) {
+      console.error('Error clearing items:', error);
+      toast({
+        title: "Error",
+        description: "Failed to clear items. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsClearing(false);
+      setShowClearDialog(false);
     }
   };
 
   return (
     <div className="container mx-auto px-4 py-8">
+      {/* Clear Items Confirmation Dialog */}
+      <AlertDialog open={showClearDialog} onOpenChange={setShowClearDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear All Items</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to remove all items from your AutoShop list?
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isClearing}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                confirmClearAllItems();
+              }}
+              disabled={isClearing}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {isClearing ? 'Clearing...' : 'Clear All Items'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <div className="max-w-4xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center">
@@ -128,13 +195,28 @@ const AutoShopDashboard: React.FC = () => {
           <TabsContent value="pending" className="mt-0">
             <div className="bg-white dark:bg-gray-800 rounded-md shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
               <div className="p-4 bg-blue-50 dark:bg-blue-900/30 border-b border-gray-200 dark:border-gray-700">
-                <h2 className="text-lg font-medium flex items-center">
-                  <Clock className="h-5 w-5 mr-2 text-blue-600 dark:text-blue-400" />
-                  Items Pending Purchase
-                </h2>
-                <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
-                  These items will be purchased automatically when your AutoShop timer completes.
-                </p>
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h2 className="text-lg font-medium flex items-center">
+                      <Clock className="h-5 w-5 mr-2 text-blue-600 dark:text-blue-400" />
+                      Items Pending Purchase
+                    </h2>
+                    <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
+                      These items will be purchased automatically when your AutoShop timer completes.
+                    </p>
+                  </div>
+                  {displayPendingItems.length > 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
+                      onClick={handleClearAllItems}
+                    >
+                      <X className="h-3 w-3 mr-1" />
+                      <span className="text-xs">Clear All Items</span>
+                    </Button>
+                  )}
+                </div>
               </div>
 
               {isPendingLoading ? (

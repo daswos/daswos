@@ -37,8 +37,8 @@ const AUTOSHOP_SETTINGS_KEY = 'daswos-autoshop-settings';
 // Default settings
 const DEFAULT_SETTINGS: AutoShopSettings = {
   maxTotalCoins: 5000,
-  minItemPrice: 5000,  // 50 dollars in cents
-  maxItemPrice: 25000, // 250 dollars in cents
+  minItemPrice: 50,  // 50 dollars
+  maxItemPrice: 250, // 250 dollars
   duration: {
     value: 30,
     unit: 'minutes'

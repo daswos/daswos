@@ -65,6 +65,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Set up AI shopper routes
   setupAiShopperRoutes(app, storage);
 
+  // Set up AutoShop routes
+  setupAutoShopRoutes(app, storage);
+
   // Health check endpoint for Docker
   app.get("/health", (req, res) => {
     res.status(200).json({ status: "ok" });
@@ -4107,9 +4110,6 @@ app.post('/api/create-payment-intent', async (req, res) => {
 
   // Use order routes for order management
   app.use('/api/orders', createOrderRoutes(storage));
-
-  // Set up AutoShop routes
-  setupAutoShopRoutes(app, storage);
 
   // We already set up AI search routes at the beginning
   // No need to call setupAiSearchRoutes again

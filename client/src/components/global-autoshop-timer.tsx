@@ -1,11 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Clock, ShoppingCart, X, ChevronDown, ChevronUp, Package } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
-import { useAutoShop } from '@/contexts/autoshop-context';
+import { useAutoShop as useLocalAutoShop } from '@/contexts/autoshop-context';
+import { useAutoShop } from '@/contexts/global-autoshop-context';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { useQuery } from '@tanstack/react-query';
-import { apiRequest } from '@/lib/queryClient';
 import { useAuth } from '@/hooks/use-auth';
 import { useSafeSphereContext } from '@/contexts/safe-sphere-context';
 import {
@@ -23,7 +22,16 @@ interface SelectedItem {
 }
 
 const GlobalAutoShopTimer: React.FC = () => {
-  const { isAutoShopEnabled, endTime, disableAutoShop, setTotalItems } = useAutoShop();
+  // Use both contexts - local for UI state and global for data
+  const { isAutoShopEnabled, endTime, disableAutoShop } = useLocalAutoShop();
+  const {
+    isAutoShopActive,
+    pendingItems,
+    stopAutoShop,
+    removeItem,
+    refreshItems
+  } = useAutoShop();
+
   const { toast } = useToast();
   const { user } = useAuth();
   const { isSafeSphere } = useSafeSphereContext();
@@ -47,33 +55,37 @@ const GlobalAutoShopTimer: React.FC = () => {
   const [initialTotalSeconds, setInitialTotalSeconds] = useState<number>(0);
   const [isVisible, setIsVisible] = useState(true);
   const [isOpen, setIsOpen] = useState(false);
-  const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([]);
 
-  // Fetch recommendations from the API
-  const { data: recommendations = [], refetch: refetchRecommendations } = useQuery({
-    queryKey: ["/api/ai-shopper/recommendations"],
-    queryFn: async () => {
-      return apiRequest<any[]>("/api/ai-shopper/recommendations", { method: 'GET' });
-    },
-    enabled: !!user && isAutoShopEnabled,
-    refetchInterval: 30000, // Refetch every 30 seconds
-    onSuccess: (data) => {
-      // Convert API recommendations to selected items format
-      const items = data
-        .filter(rec => rec.status === 'pending' || rec.status === 'added_to_cart')
-        .map(rec => ({
-          id: rec.id.toString(),
-          name: rec.product?.title || 'Unknown Product',
-          price: rec.product?.price ? Math.floor(rec.product.price / 100) : 0, // Convert cents to dollars
-          image: rec.product?.image_url
-        }));
+  // Convert pendingItems to the format needed for display
+  const selectedItems: SelectedItem[] = pendingItems?.map(item => ({
+    id: item.id.toString(),
+    name: item.name || 'Unknown Product',
+    price: item.estimatedPrice ? Math.floor(item.estimatedPrice) : 0,
+    image: item.imageUrl
+  })) || [];
 
-      setSelectedItems(items);
+  // Use a ref to track if we've already set up the refresh interval
+  const hasSetupInterval = useRef(false);
 
-      // Update total items count in the AutoShop context
-      setTotalItems(items.length);
+  // Refresh items when AutoShop is active, but only set up the interval once
+  useEffect(() => {
+    if ((isAutoShopEnabled || isAutoShopActive) && !hasSetupInterval.current) {
+      hasSetupInterval.current = true;
+
+      // Initial refresh
+      refreshItems();
+
+      // Set up interval to refresh items
+      const interval = setInterval(() => {
+        refreshItems();
+      }, 30000); // Refresh every 30 seconds (increased from 10 seconds)
+
+      return () => {
+        clearInterval(interval);
+        hasSetupInterval.current = false;
+      };
     }
-  });
+  }, [isAutoShopEnabled, isAutoShopActive, refreshItems]);
 
   // Calculate time left and update state
   useEffect(() => {
@@ -164,131 +176,32 @@ const GlobalAutoShopTimer: React.FC = () => {
   // Handle stop button click
   const handleStopClick = async () => {
     try {
-      // Clear recommendations from the API
-      await apiRequest("/api/ai-shopper/recommendations/clear", { method: "POST" });
+      // Stop the AutoShop process using the global context
+      await stopAutoShop();
 
-      // Clear the selected items locally
-      setSelectedItems([]);
-
-      // Disable AutoShop
+      // Disable AutoShop in the local context
       disableAutoShop();
 
       toast({
         title: "AutoShop Stopped",
-        description: "AutoShop has been stopped and all items have been cleared.",
+        description: "AutoShop has been stopped. Items remain in your list and can be removed or kept for next time.",
       });
     } catch (error) {
-      console.error("Failed to clear recommendations:", error);
+      console.error("Failed to stop AutoShop:", error);
 
-      // Still disable AutoShop even if clearing recommendations fails
+      // Still disable AutoShop even if stopping fails
       disableAutoShop();
 
       toast({
         title: "AutoShop Stopped",
-        description: "AutoShop has been stopped, but there was an error clearing items.",
+        description: "AutoShop has been stopped, but there was an error with the server.",
         variant: "destructive"
       });
     }
   };
 
-  // Refresh recommendations when AutoShop is enabled
-  useEffect(() => {
-    if (isAutoShopEnabled && endTime && user) {
-      // Initial fetch
-      refetchRecommendations();
-    }
-  }, [isAutoShopEnabled, endTime, user, refetchRecommendations]);
-
-  // Automatically select items based on itemsPerMinute setting
-  useEffect(() => {
-    if (isAutoShopEnabled && endTime) {
-      // Get settings from localStorage
-      const savedSettings = localStorage.getItem('daswos-autoshop-settings');
-      if (!savedSettings) return;
-
-      try {
-        const settings = JSON.parse(savedSettings);
-
-        // Only set up interval if itemsPerMinute is greater than 0
-        if (settings.itemsPerMinute > 0) {
-          console.log(`Setting up auto-selection interval: ${settings.itemsPerMinute} items per minute`);
-
-          // Calculate interval in milliseconds (convert items per minute to milliseconds between items)
-          const intervalMs = 60000 / settings.itemsPerMinute;
-
-          // Function to generate a new recommendation
-          const generateRecommendation = async () => {
-            try {
-              // Call the AI shopper API to generate a recommendation
-              const response = await fetch('/api/ai-shopper/generate', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                  categories: settings.categories || [],
-                  minPrice: settings.minItemPrice || 0,
-                  maxPrice: settings.maxItemPrice || 100000,
-                  useRandomMode: settings.useRandomMode || false,
-                  useSafeSphere: isSafeSphere
-                  // Note: minPrice and maxPrice are in cents, where 100 cents = $1
-                  // DasWos Coins are in dollars, where 1 coin = $1
-                })
-              });
-
-              if (!response.ok) {
-                throw new Error('Failed to generate recommendation');
-              }
-
-              const recommendations = await response.json();
-
-              if (recommendations && recommendations.length > 0) {
-                // Get the first recommendation
-                const recommendation = recommendations[0];
-
-                // Add the recommendation to the cart
-                if (recommendation.product) {
-                  try {
-                    await fetch(`/api/ai-shopper/recommendations/${recommendation.id}/add-to-cart`, {
-                      method: 'POST',
-                      headers: {
-                        'Content-Type': 'application/json'
-                      }
-                    });
-
-                    console.log(`Added item ${recommendation.product.title} to cart`);
-
-                    // Refresh recommendations to show the new item
-                    refetchRecommendations();
-
-                    // Show toast notification
-                    toast({
-                      title: "New Item Added",
-                      description: `AutoShop found: ${recommendation.product.title}`,
-                    });
-                  } catch (cartError) {
-                    console.error('Error adding item to cart:', cartError);
-                  }
-                }
-              }
-            } catch (error) {
-              console.error('Error generating recommendation:', error);
-            }
-          };
-
-          // Set up interval to generate recommendations
-          const addItemInterval = setInterval(generateRecommendation, intervalMs);
-
-          // Generate the first recommendation immediately
-          generateRecommendation();
-
-          return () => clearInterval(addItemInterval);
-        }
-      } catch (error) {
-        console.error('Error parsing AutoShop settings:', error);
-      }
-    }
-  }, [isAutoShopEnabled, endTime, toast, refetchRecommendations, isSafeSphere]);
+  // The automatic item selection is now handled by the global AutoShop context
+  // We don't need to implement it here anymore
 
   // Don't render anything if AutoShop is not enabled
   if (!isAutoShopEnabled || !endTime) {
@@ -353,27 +266,20 @@ const GlobalAutoShopTimer: React.FC = () => {
                       <span className="text-sm">{item.name}</span>
                     </div>
                     <div className="flex items-center gap-3">
-                      <span className="text-sm font-medium">${item.price} (${Math.ceil(item.price / 100)} coins)</span>
+                      <span className="text-sm font-medium">${item.price} ({item.price} coins)</span>
                       <Button
                         variant="ghost"
                         size="icon"
                         className="h-5 w-5 rounded-full hover:bg-red-100 p-0"
                         onClick={async () => {
                           try {
-                            // Update the recommendation status in the API
-                            await apiRequest(`/api/ai-shopper/recommendations/${item.id}`, {
-                              method: 'PUT',
-                              body: JSON.stringify({
-                                status: 'rejected',
-                                reason: 'User removed from AutoShop'
-                              })
+                            // Use the global context to remove the item
+                            await removeItem(item.id);
+
+                            toast({
+                              title: "Item Removed",
+                              description: "The item has been removed from your AutoShop list.",
                             });
-
-                            // Remove from local state
-                            setSelectedItems(items => items.filter(i => i.id !== item.id));
-
-                            // Update total items count
-                            setTotalItems(prev => Math.max(0, prev - 1));
                           } catch (error) {
                             console.error("Failed to remove item:", error);
                             toast({
@@ -403,7 +309,7 @@ const GlobalAutoShopTimer: React.FC = () => {
                 <span className="text-xl font-bold">
                   ${selectedItems.reduce((sum, item) => sum + item.price, 0)}
                   <span className="text-sm font-normal ml-1">
-                    ({selectedItems.reduce((sum, item) => sum + Math.ceil(item.price / 100), 0)} coins)
+                    ({selectedItems.reduce((sum, item) => sum + item.price, 0)} coins)
                   </span>
                 </span>
               </div>

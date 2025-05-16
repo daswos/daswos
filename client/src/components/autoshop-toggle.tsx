@@ -4,6 +4,7 @@ import { Label } from "@/components/ui/label";
 import AutoShopSettingsDialog from './autoshop-settings-dialog-new';
 import { useToast } from '@/hooks/use-toast';
 import { useAutoShop } from '@/contexts/autoshop-context';
+import { useAutoShop as useGlobalAutoShop } from '@/contexts/global-autoshop-context';
 import { useLocation } from 'wouter';
 
 interface AutoShopToggleProps {
@@ -14,15 +15,20 @@ const AutoShopToggle: React.FC<AutoShopToggleProps> = ({
   className = ''
 }) => {
   const { toast } = useToast();
-  const { isAutoShopEnabled, enableAutoShop, disableAutoShop, userCoins, settings, timeRemaining, totalItems } = useAutoShop();
+  const { isAutoShopEnabled, enableAutoShop, disableAutoShop, userCoins, settings } = useAutoShop();
+  const { isAutoShopActive, pendingItems, startAutoShop, stopAutoShop } = useGlobalAutoShop();
   const [isLoading, setIsLoading] = useState(false);
   const [statusText, setStatusText] = useState('');
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [, setLocation] = useLocation();
 
+  // Use the global context's active state if available, otherwise fall back to the local context
+  const isActive = isAutoShopActive || isAutoShopEnabled;
+  const totalItems = pendingItems?.length || 0;
+
   // Animated text effect for status message
   React.useEffect(() => {
-    if (isAutoShopEnabled) {
+    if (isActive) {
       // Reset the text
       setStatusText('');
 
@@ -50,7 +56,7 @@ const AutoShopToggle: React.FC<AutoShopToggleProps> = ({
       // Clear the text when AutoShop is turned off
       setStatusText('');
     }
-  }, [isAutoShopEnabled]);
+  }, [isActive]);
 
   // Handle checkbox click - open settings dialog if not enabled
   const handleCheckboxClick = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -67,36 +73,55 @@ const AutoShopToggle: React.FC<AutoShopToggleProps> = ({
   };
 
   // Handle settings save and enable AutoShop
-  const handleSettingsSave = (newSettings: typeof settings) => {
+  const handleSettingsSave = async (newSettings: typeof settings) => {
     if (!newSettings) return;
 
     setIsLoading(true);
     setSettingsDialogOpen(false);
 
-    // Simulate API call to enable AutoShop with settings
-    setTimeout(() => {
+    try {
+      // First update the local context settings
       enableAutoShop(newSettings);
 
-      // Removed toast notification for activation
+      // Then start the global AutoShop
+      await startAutoShop();
 
+      // Navigate to the dashboard
+      setLocation('/autoshop-dashboard');
+    } catch (error) {
+      console.error('Error starting AutoShop:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to start AutoShop. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   // Handle disabling AutoShop
-  const handleAutoShopToggle = (checked: boolean) => {
+  const handleAutoShopToggle = async (checked: boolean) => {
     if (checked) return; // Should never happen, as enabling is handled by settings dialog
 
     setIsLoading(true);
 
-    // Simulate API call to disable AutoShop
-    setTimeout(() => {
+    try {
+      // Stop the global AutoShop
+      await stopAutoShop();
+
+      // Then update the local context
       disableAutoShop();
-
-      // Removed toast notification for deactivation
-
+    } catch (error) {
+      console.error('Error stopping AutoShop:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to stop AutoShop. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
       setIsLoading(false);
-    }, 500);
+    }
   };
 
   return (
@@ -105,7 +130,7 @@ const AutoShopToggle: React.FC<AutoShopToggleProps> = ({
         <input
           type="checkbox"
           id="autoshop-mode"
-          checked={isAutoShopEnabled}
+          checked={isActive}
           onChange={handleCheckboxClick}
           className="mr-2 h-4 w-4"
           disabled={isLoading}
@@ -116,7 +141,7 @@ const AutoShopToggle: React.FC<AutoShopToggleProps> = ({
             <span className="font-normal text-black dark:text-white">
               {isLoading ? 'Processing...' : 'AutoShop'}
             </span>
-            {isAutoShopEnabled && (
+            {isActive && (
               <>
                 <span className="ml-2 text-green-600 font-medium text-xs animated-text">
                   {statusText}
@@ -128,7 +153,7 @@ const AutoShopToggle: React.FC<AutoShopToggleProps> = ({
                       e.preventDefault();
                       e.stopPropagation();
                       // Navigate to AutoShop dashboard with items view
-                      setLocation('/autoshop-dashboard?tab=items');
+                      setLocation('/autoshop-dashboard?tab=pending');
                     }}
                     title="View AutoShop items"
                   >
@@ -141,7 +166,7 @@ const AutoShopToggle: React.FC<AutoShopToggleProps> = ({
           </div>
         </Label>
 
-        {!isAutoShopEnabled && (
+        {!isActive && (
           <button
             onClick={() => setSettingsDialogOpen(true)}
             className="ml-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"

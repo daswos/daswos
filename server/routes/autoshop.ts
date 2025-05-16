@@ -62,6 +62,44 @@ export function setupAutoShopRoutes(app: Express, storage: IStorage): void {
     }
   });
 
+  // Helper function to finalize AutoShop purchases when timer completes
+  async function finalizeAutoShopPurchases(req: any) {
+    try {
+      // Get all pending recommendations
+      const pendingRecommendations = req.session.autoShopRecommendations
+        ? req.session.autoShopRecommendations.filter(rec => rec.status === 'pending')
+        : [];
+
+      console.log(`AutoShop timer completed: Finalizing ${pendingRecommendations.length} pending purchases`);
+
+      // Process each pending recommendation
+      for (const rec of pendingRecommendations) {
+        // Update the recommendation status to 'purchased'
+        rec.status = 'purchased';
+        rec.updatedAt = new Date();
+
+        // Find the corresponding transaction
+        const transactionIndex = req.session.dasWosCoinsTransactions.findIndex(
+          (t: any) => t.metadata && t.metadata.recommendationId === rec.id
+        );
+
+        if (transactionIndex !== -1) {
+          // Update the transaction status to 'completed'
+          const transaction = req.session.dasWosCoinsTransactions[transactionIndex];
+          transaction.status = 'completed';
+          transaction.type = 'spend';
+          transaction.description = transaction.description.replace('reserved', 'purchased');
+
+          req.session.dasWosCoinsTransactions[transactionIndex] = transaction;
+        }
+
+        console.log(`AutoShop finalized purchase: ${rec.product.title || rec.product.name} for ${rec.product.price} coins`);
+      }
+    } catch (error) {
+      console.error('Error finalizing AutoShop purchases:', error);
+    }
+  }
+
   // Helper function to select a random product for AutoShop
   async function selectRandomProduct(req: any, storage: IStorage) {
     try {
@@ -73,6 +111,8 @@ export function setupAutoShopRoutes(app: Express, storage: IStorage): void {
       // Check if end time has passed
       const endTime = new Date(req.session.autoShopEndTime);
       if (new Date() > endTime) {
+        // AutoShop timer has completed, finalize purchases
+        await finalizeAutoShopPurchases(req);
         req.session.autoShopActive = false;
         return;
       }
@@ -127,10 +167,11 @@ export function setupAutoShopRoutes(app: Express, storage: IStorage): void {
 
       req.session.autoShopRecommendations.unshift(recommendation);
 
-      // Spend coins
+      // Reserve coins (not actually spent until purchase is confirmed)
+      // We still deduct from the available balance to prevent overspending
       req.session.dasWosCoins -= selectedProduct.price;
 
-      // Record the transaction
+      // Record the transaction as 'reserved' instead of 'spend'
       if (!req.session.dasWosCoinsTransactions) {
         req.session.dasWosCoinsTransactions = [];
       }
@@ -139,19 +180,23 @@ export function setupAutoShopRoutes(app: Express, storage: IStorage): void {
         id: Date.now(),
         userId: req.isAuthenticated() ? req.user.id : null,
         amount: selectedProduct.price,
-        type: 'spend',
-        description: `AutoShop purchased: ${selectedProduct.title || selectedProduct.name}`,
-        status: 'completed',
+        type: 'reserve',  // Changed from 'spend' to 'reserve'
+        description: `AutoShop reserved: ${selectedProduct.title || selectedProduct.name}`,
+        status: 'pending', // Changed from 'completed' to 'pending'
         metadata: {
           productId: selectedProduct.id,
-          autoShop: true
+          autoShop: true,
+          recommendationId: recommendation.id // Link to the recommendation
         },
         createdAt: new Date()
       };
 
       req.session.dasWosCoinsTransactions.unshift(transaction);
 
-      console.log(`AutoShop purchased ${selectedProduct.title || selectedProduct.name} for ${selectedProduct.price} coins`);
+      // Store the transaction ID in the recommendation for reference
+      recommendation.transactionId = transaction.id;
+
+      console.log(`AutoShop reserved ${selectedProduct.title || selectedProduct.name} for ${selectedProduct.price} coins`);
 
       // Schedule next product selection (1 minute interval)
       setTimeout(() => {
@@ -188,45 +233,9 @@ export function setupAutoShopRoutes(app: Express, storage: IStorage): void {
         return res.json(pendingItems);
       }
 
-      // Fallback to database if no session recommendations
-      const userId = req.isAuthenticated() ? req.user.id : null;
-
-      // Get pending recommendations from AI shopper
-      const recommendations = await storage.getAiShopperRecommendationsByUserId(userId);
-
-      // For each recommendation, we need to ensure the product details are included
-      const pendingItems = await Promise.all(
-        recommendations
-          .filter(rec => rec.status === 'pending')
-          .map(async (rec) => {
-            // If product is not already included
-            if (!rec.product) {
-              const product = await storage.getProductById(rec.productId);
-              return {
-                id: rec.id,
-                productId: rec.productId,
-                name: product?.name || product?.title || 'Unknown Product',
-                description: product?.description || 'No description available',
-                estimatedPrice: product?.price || 0,
-                imageUrl: product?.imageUrl || product?.image_url,
-                category: product?.category || 'Uncategorized',
-                addedAt: rec.createdAt,
-                confidence: rec.confidence || 0
-              };
-            }
-            return {
-              id: rec.id,
-              productId: rec.productId,
-              name: rec.product.name || rec.product.title,
-              description: rec.product.description,
-              estimatedPrice: rec.product.price,
-              imageUrl: rec.product.imageUrl || rec.product.image_url,
-              category: rec.product.category,
-              addedAt: rec.createdAt,
-              confidence: rec.confidence || 0
-            };
-          })
-      );
+      // Fallback to empty array if no session recommendations
+      // We're not using database fallback since the function doesn't exist
+      const pendingItems = [];
 
       res.json(pendingItems);
     } catch (error) {
@@ -261,45 +270,9 @@ export function setupAutoShopRoutes(app: Express, storage: IStorage): void {
         return res.json(orderHistory);
       }
 
-      // Fallback to database if no session recommendations
-      const userId = req.isAuthenticated() ? req.user.id : null;
-
-      // Get recommendations from AI shopper
-      const recommendations = await storage.getAiShopperRecommendationsByUserId(userId);
-
-      // For each recommendation, we need to ensure the product details are included
-      const orderHistory = await Promise.all(
-        recommendations
-          .filter(rec => rec.status === 'purchased' || rec.status === 'added_to_cart')
-          .map(async (rec) => {
-            // If product is not already included
-            if (!rec.product) {
-              const product = await storage.getProductById(rec.productId);
-              return {
-                id: rec.id,
-                productId: rec.productId,
-                name: product?.name || product?.title || 'Unknown Product',
-                description: product?.description || 'No description available',
-                price: product?.price || 0,
-                imageUrl: product?.imageUrl || product?.image_url,
-                category: product?.category || 'Uncategorized',
-                purchasedAt: rec.updatedAt || rec.createdAt,
-                status: rec.status
-              };
-            }
-            return {
-              id: rec.id,
-              productId: rec.productId,
-              name: rec.product.name || rec.product.title,
-              description: rec.product.description,
-              price: rec.product.price,
-              imageUrl: rec.product.imageUrl || rec.product.image_url,
-              category: rec.product.category,
-              purchasedAt: rec.updatedAt || rec.createdAt,
-              status: rec.status
-            };
-          })
-      );
+      // Fallback to empty array if no session recommendations
+      // We're not using database fallback since the function doesn't exist
+      const orderHistory = [];
 
       res.json(orderHistory);
     } catch (error) {
@@ -371,15 +344,208 @@ export function setupAutoShopRoutes(app: Express, storage: IStorage): void {
   // Stop AutoShop
   router.post('/stop', async (req, res) => {
     try {
+      // Get the pending recommendations before stopping
+      const pendingRecommendations = req.session.autoShopRecommendations
+        ? req.session.autoShopRecommendations.filter(rec => rec.status === 'pending')
+        : [];
+
+      // Calculate total coins to refund
+      let coinsToRefund = 0;
+      for (const rec of pendingRecommendations) {
+        if (rec.product && rec.product.price) {
+          coinsToRefund += rec.product.price;
+        }
+      }
+
+      // Refund the coins
+      if (coinsToRefund > 0) {
+        // Add the coins back to the user's balance
+        if (!req.session.dasWosCoins) {
+          req.session.dasWosCoins = 0;
+        }
+        req.session.dasWosCoins += coinsToRefund;
+
+        // Record the refund transaction
+        if (!req.session.dasWosCoinsTransactions) {
+          req.session.dasWosCoinsTransactions = [];
+        }
+
+        const refundTransaction = {
+          id: Date.now(),
+          userId: req.isAuthenticated() ? req.user.id : null,
+          amount: coinsToRefund,
+          type: 'refund',
+          description: `AutoShop cancelled: Refunded ${coinsToRefund} coins for ${pendingRecommendations.length} pending items`,
+          status: 'completed',
+          metadata: {
+            autoShop: true,
+            refundReason: 'cancelled'
+          },
+          createdAt: new Date()
+        };
+
+        req.session.dasWosCoinsTransactions.unshift(refundTransaction);
+
+        console.log(`AutoShop cancelled: Refunded ${coinsToRefund} coins for ${pendingRecommendations.length} pending items`);
+      }
+
+      // Mark AutoShop as inactive
       req.session.autoShopActive = false;
 
       res.json({
         success: true,
-        message: 'AutoShop stopped successfully'
+        message: 'AutoShop stopped successfully',
+        coinsRefunded: coinsToRefund
       });
     } catch (error) {
       console.error('Error stopping AutoShop:', error);
       res.status(500).json({ error: 'Failed to stop AutoShop' });
+    }
+  });
+
+  // Clear all pending items
+  router.post('/clear', async (req, res) => {
+    try {
+      // Get the pending recommendations before clearing
+      const pendingRecommendations = req.session.autoShopRecommendations
+        ? req.session.autoShopRecommendations.filter(rec => rec.status === 'pending')
+        : [];
+
+      // Calculate total coins to refund
+      let coinsToRefund = 0;
+      for (const rec of pendingRecommendations) {
+        if (rec.product && rec.product.price) {
+          coinsToRefund += rec.product.price;
+        }
+      }
+
+      // Refund the coins
+      if (coinsToRefund > 0) {
+        // Add the coins back to the user's balance
+        if (!req.session.dasWosCoins) {
+          req.session.dasWosCoins = 0;
+        }
+        req.session.dasWosCoins += coinsToRefund;
+
+        // Record the refund transaction
+        if (!req.session.dasWosCoinsTransactions) {
+          req.session.dasWosCoinsTransactions = [];
+        }
+
+        const refundTransaction = {
+          id: Date.now(),
+          userId: req.isAuthenticated() ? req.user.id : null,
+          amount: coinsToRefund,
+          type: 'refund',
+          description: `AutoShop cleared: Refunded ${coinsToRefund} coins for ${pendingRecommendations.length} pending items`,
+          status: 'completed',
+          metadata: {
+            autoShop: true,
+            refundReason: 'cleared'
+          },
+          createdAt: new Date()
+        };
+
+        req.session.dasWosCoinsTransactions.unshift(refundTransaction);
+
+        console.log(`AutoShop cleared: Refunded ${coinsToRefund} coins for ${pendingRecommendations.length} pending items`);
+      }
+
+      // Clear all pending recommendations
+      if (req.session.autoShopRecommendations) {
+        req.session.autoShopRecommendations = req.session.autoShopRecommendations.filter(
+          rec => rec.status !== 'pending'
+        );
+      }
+
+      // Also clear from database if user is authenticated
+      if (req.isAuthenticated()) {
+        const userId = req.user.id;
+        await storage.clearAiShopperRecommendations(userId);
+      }
+
+      res.json({
+        success: true,
+        message: 'All pending items cleared successfully',
+        coinsRefunded: coinsToRefund
+      });
+    } catch (error) {
+      console.error('Error clearing pending items:', error);
+      res.status(500).json({ error: 'Failed to clear pending items' });
+    }
+  });
+
+  // Remove a single item
+  router.delete('/item/:id', async (req, res) => {
+    try {
+      const itemId = parseInt(req.params.id);
+
+      if (isNaN(itemId)) {
+        return res.status(400).json({ error: 'Invalid item ID' });
+      }
+
+      // Find the item to be removed
+      let removedItem = null;
+      if (req.session.autoShopRecommendations) {
+        removedItem = req.session.autoShopRecommendations.find(rec => rec.id === itemId && rec.status === 'pending');
+      }
+
+      // Refund coins if the item was found and is in pending status
+      let coinsRefunded = 0;
+      if (removedItem && removedItem.product && removedItem.product.price) {
+        coinsRefunded = removedItem.product.price;
+
+        // Add the coins back to the user's balance
+        if (!req.session.dasWosCoins) {
+          req.session.dasWosCoins = 0;
+        }
+        req.session.dasWosCoins += coinsRefunded;
+
+        // Record the refund transaction
+        if (!req.session.dasWosCoinsTransactions) {
+          req.session.dasWosCoinsTransactions = [];
+        }
+
+        const refundTransaction = {
+          id: Date.now(),
+          userId: req.isAuthenticated() ? req.user.id : null,
+          amount: coinsRefunded,
+          type: 'refund',
+          description: `AutoShop item removed: Refunded ${coinsRefunded} coins for ${removedItem.product.title || removedItem.product.name}`,
+          status: 'completed',
+          metadata: {
+            autoShop: true,
+            refundReason: 'item_removed',
+            productId: removedItem.product.id
+          },
+          createdAt: new Date()
+        };
+
+        req.session.dasWosCoinsTransactions.unshift(refundTransaction);
+
+        console.log(`AutoShop item removed: Refunded ${coinsRefunded} coins for ${removedItem.product.title || removedItem.product.name}`);
+      }
+
+      // Remove from session recommendations
+      if (req.session.autoShopRecommendations) {
+        req.session.autoShopRecommendations = req.session.autoShopRecommendations.filter(
+          rec => rec.id !== itemId
+        );
+      }
+
+      // Also remove from database if user is authenticated
+      if (req.isAuthenticated()) {
+        await storage.updateAiShopperRecommendationStatus(itemId, 'rejected', 'Removed by user', true);
+      }
+
+      res.json({
+        success: true,
+        message: 'Item removed successfully',
+        coinsRefunded
+      });
+    } catch (error) {
+      console.error('Error removing item:', error);
+      res.status(500).json({ error: 'Failed to remove item' });
     }
   });
 
