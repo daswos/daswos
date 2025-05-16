@@ -16,6 +16,18 @@ const DasbarForwardButton: React.FC<DasbarForwardButtonProps> = ({
   const handleForward = () => {
     // Try to go forward in history if possible
     window.history.forward();
+
+    // Also dispatch a custom event to reset search interface if we're going to home
+    // This helps ensure the search interface is properly reset
+    setTimeout(() => {
+      // Check if we're on the home page after navigation
+      if (window.location.pathname === '/' || window.location.pathname === '') {
+        const resetEvent = new CustomEvent('resetSearchInterface', {
+          detail: { reset: true }
+        });
+        window.dispatchEvent(resetEvent);
+      }
+    }, 100);
   };
 
   return (

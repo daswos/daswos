@@ -53,7 +53,13 @@ const DaswosCoinsPage = () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ amount }),
+        body: JSON.stringify({
+          amount,
+          metadata: {
+            packageName: `${amount} DasWos Coins`,
+            purchaseTimestamp: new Date().toISOString()
+          }
+        }),
       });
     },
     onSuccess: () => {
@@ -88,7 +94,7 @@ const DaswosCoinsPage = () => {
     onSuccess: () => {
       toast({
         title: 'Coins Swapped',
-        description: `Successfully swapped ${formatDasWosCoins(swapAmount)} DasWos Coins for ${formatCurrency(swapAmount / 100)}`,
+        description: `Successfully swapped ${formatDasWosCoins(swapAmount)} DasWos Coins for ${formatCurrency(swapAmount)}`,
       });
       queryClient.invalidateQueries({ queryKey: ['/api/user/daswos-coins/balance'] });
       queryClient.invalidateQueries({ queryKey: ['/api/user/daswos-coins/transactions'] });
@@ -246,7 +252,7 @@ const DaswosCoinsPage = () => {
                 <div className="bg-gray-100 p-4 rounded-md">
                   <div className="flex justify-between mb-2">
                     <span>Cost:</span>
-                    <span>${(purchaseAmount / 100).toFixed(2)}</span>
+                    <span>${purchaseAmount.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between font-bold">
                     <span>You'll Receive:</span>
@@ -350,7 +356,7 @@ const DaswosCoinsPage = () => {
                   </div>
                   <div className="flex justify-between font-bold">
                     <span>You'll Receive:</span>
-                    <span>${(swapAmount / 100).toFixed(2)}</span>
+                    <span>${swapAmount.toFixed(2)}</span>
                   </div>
                 </div>
               </div>

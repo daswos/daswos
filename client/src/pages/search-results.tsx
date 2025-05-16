@@ -6,6 +6,7 @@ import SearchBar from '@/components/search-bar';
 import FeatureAwareSphereToggle from '@/components/feature-aware-sphere-toggle';
 import FeatureAwareSuperSafeToggle from '@/components/feature-aware-super-safe-toggle';
 import ProductTile from '@/components/product-tile';
+import CarouselSearchResults from '@/components/carousel-search-results';
 import '@/styles/product-tile.css';
 import { Product } from '@shared/schema';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -849,10 +850,18 @@ const SearchResults: React.FC = () => {
           </div>
         ) : (
           // Results
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mx-auto">
-            {filteredProducts.map((product: Product) => (
-              <ProductTile key={product.id} product={product} />
-            ))}
+          <div className="mx-auto">
+            <h2 className="text-xl font-semibold mb-6 text-center">RESULTS</h2>
+            <div className="mb-8">
+              <CarouselSearchResults products={filteredProducts} />
+            </div>
+
+            {/* Traditional grid view as fallback */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mx-auto mt-8">
+              {filteredProducts.map((product: Product) => (
+                <ProductTile key={product.id} product={product} />
+              ))}
+            </div>
           </div>
 
             {/* Pagination - Static for now */}

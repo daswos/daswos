@@ -18,11 +18,14 @@ import { createProductRoutes } from './routes/products';
 import { createDaswosAiRoutes } from './routes/daswos-ai';
 import { setupAiSearchRoutes } from './routes/ai-search';
 import { setupSellerAiRoutes } from './routes/seller-ai';
+import { setupAutoShopRoutes } from './routes/autoshop';
 import { setupCategorySearchRoutes } from './routes/category-search';
 import createUserSettingsRoutes from './routes/user-settings';
 import { createStripeRoutes } from './routes/stripe';
 import { createPaymentRoutes } from './routes/payment';
 import { createInformationRoutes } from './routes/information-routes';
+import { setupAiShopperRoutes } from './routes/ai-shopper';
+import { createOrderRoutes } from './routes/order';
 import {
   createPaymentIntent,
   createCustomer,
@@ -59,6 +62,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Set up only the AI search routes
   setupAiSearchRoutes(app, storage);
 
+  // Set up AI shopper routes
+  setupAiShopperRoutes(app, storage);
+
   // Health check endpoint for Docker
   app.get("/health", (req, res) => {
     res.status(200).json({ status: "ok" });
@@ -72,6 +78,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const sphere = req.query.sphere as string || "safesphere";
       const query = req.query.q as string || "";
       const isBulkBuy = req.query.bulk === 'true';
+      const categoryName = req.query.category as string;
 
       // SuperSafe Mode parameters
       const superSafeEnabled = req.query.superSafeEnabled === 'true';
@@ -90,10 +97,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         effectiveSphere = effectiveSphere === 'safesphere' ? 'bulkbuy-safe' : 'bulkbuy-open';
       }
 
-      console.log(`Products API request - sphere: ${sphere}, query: "${query}", bulkBuy: ${isBulkBuy}, effectiveSphere: ${effectiveSphere}, superSafeEnabled: ${superSafeEnabled}`);
+      console.log(`Products API request - sphere: ${sphere}, query: "${query}", bulkBuy: ${isBulkBuy}, effectiveSphere: ${effectiveSphere}, superSafeEnabled: ${superSafeEnabled}, category: ${categoryName || 'none'}`);
 
-      // Get products based on the effective sphere
-      let products = await storage.getProducts(effectiveSphere, query);
+      // Get products based on the effective sphere and category
+      let products;
+      if (categoryName) {
+        // If a category is specified, get products by category
+        products = await storage.getProductsByCategory(categoryName);
+      } else {
+        // Otherwise get by general query
+        products = await storage.getProducts(effectiveSphere, query);
+      }
 
       // Apply SuperSafe Mode filters if enabled
       if (superSafeEnabled) {
@@ -131,6 +145,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
             );
           });
           console.log(`SuperSafe Mode: Filtered out adult content, ${products.length} remaining`);
+        }
+      }
+
+      // Track search history if user is authenticated
+      if (req.isAuthenticated() && query) {
+        try {
+          // Get category ID if category name is provided
+          let categoryId = null;
+          if (categoryName) {
+            const categories = await storage.getCategoryIdsByNames([categoryName]);
+            if (categories.length > 0) {
+              categoryId = categories[0];
+            }
+          }
+
+          // Add to search history
+          await storage.addUserSearchHistory(req.user.id, query, categoryId);
+          console.log(`Added search query "${query}" to user ${req.user.id}'s history`);
+        } catch (historyError) {
+          console.error('Error tracking search history:', historyError);
+          // Continue with the response even if history tracking fails
         }
       }
 
@@ -268,6 +303,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const product = await storage.getProductById(productId);
       if (!product) {
         return res.status(404).json({ message: "Product not found" });
+      }
+
+      // Track product click in search history if user is authenticated
+      if (req.isAuthenticated()) {
+        try {
+          // Get the most recent search query for this user
+          const searchHistory = await storage.getUserSearchHistory(req.user.id, 1);
+
+          if (searchHistory.length > 0) {
+            const latestSearch = searchHistory[0];
+
+            // Update the search history with the clicked product
+            await storage.addUserSearchHistory(
+              req.user.id,
+              latestSearch.searchQuery,
+              product.categoryId,
+              productId
+            );
+
+            console.log(`Updated search history for user ${req.user.id} with clicked product ${productId}`);
+          }
+        } catch (historyError) {
+          console.error('Error tracking product click:', historyError);
+          // Continue with the response even if history tracking fails
+        }
       }
 
       res.json(product);
@@ -412,6 +472,7 @@ app.post('/api/create-payment-intent', async (req, res) => {
             { id: 'daslist', label: 'das.list', path: '/d-list', icon: 'List' },
             { id: 'jobs', label: 'Jobs', path: '/browse-jobs', icon: 'Briefcase' },
             { id: 'ai-assistant', label: 'AI Assistant', path: '/ai-assistant', icon: 'Bot' },
+            { id: 'autoshop', label: 'AutoShop', path: '/autoshop-dashboard', icon: 'AutoShopIcon' },
             { id: 'cart', label: 'Cart', path: '/cart', icon: 'ShoppingCart' },
             { id: 'daswos-coins', label: 'DasWos Coins', path: '/daswos-coins', icon: 'Coins' }
           ]
@@ -3428,24 +3489,28 @@ app.post('/api/create-payment-intent', async (req, res) => {
 
   // DasWos Coins routes
 
-  // Get user's DasWos Coins balance
+  // Get user's DasWos Coins balance - Simplified version
   app.get("/api/user/daswos-coins/balance", async (req, res) => {
     try {
-      // Check if user is authenticated
-      if (!req.isAuthenticated()) {
-        return res.status(401).json({ message: "You must be logged in to view your DasWos Coins balance" });
+      // For authenticated users, return their session balance
+      if (req.isAuthenticated()) {
+        // Use the session to store the balance
+        if (!req.session.dasWosCoins) {
+          req.session.dasWosCoins = 0;
+        }
+
+        return res.json({ balance: req.session.dasWosCoins });
       }
 
-      const userId = req.user.id;
-      const balance = await storage.getUserDasWosCoins(userId);
-      res.json({ balance });
+      // For non-authenticated users, return a balance of 0 coins
+      return res.json({ balance: 0 });
     } catch (error) {
       console.error('Error fetching user DasWos Coins balance:', error);
       res.status(500).json({ message: "Failed to fetch DasWos Coins balance" });
     }
   });
 
-  // Get user's DasWos Coins transaction history
+  // Get user's DasWos Coins transaction history - Simplified version
   app.get("/api/user/daswos-coins/transactions", async (req, res) => {
     try {
       // Check if user is authenticated
@@ -3454,85 +3519,102 @@ app.post('/api/create-payment-intent', async (req, res) => {
       }
 
       const userId = req.user.id;
-      const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
 
-      const transactions = await storage.getDasWosCoinsTransactions(userId, limit);
-      res.json(transactions);
+      // Initialize session transactions if they don't exist
+      if (!req.session.dasWosCoinsTransactions) {
+        req.session.dasWosCoinsTransactions = [];
+      }
+
+      // Return the transactions from the session
+      res.json(req.session.dasWosCoinsTransactions || []);
     } catch (error) {
       console.error('Error fetching user DasWos Coins transactions:', error);
       res.status(500).json({ message: "Failed to fetch transaction history" });
     }
   });
 
-  // Purchase DasWos Coins (using Stripe)
+  // Purchase DasWos Coins (no payment required) - Simplified version
   app.post("/api/user/daswos-coins/purchase", async (req, res) => {
     try {
-      // Check if user is authenticated
-      if (!req.isAuthenticated()) {
-        return res.status(401).json({ message: "You must be logged in to purchase DasWos Coins" });
-      }
+      console.log("Processing DasWos Coins purchase request:", req.body);
 
       // Get data from request body
-      const { packageId, amount, priceInCents, metadata } = req.body;
+      const { amount } = req.body;
 
       if (!amount || typeof amount !== 'number' || amount <= 0) {
+        console.log("Invalid amount:", amount);
         return res.status(400).json({ message: "Invalid amount. Must be a positive number." });
       }
 
-      if (!priceInCents || typeof priceInCents !== 'number' || priceInCents <= 0) {
-        return res.status(400).json({ message: "Invalid price. Must be a positive number." });
-      }
+      // Handle both authenticated and non-authenticated users
+      const userId = req.isAuthenticated() ? req.user.id : null;
+      console.log("User ID:", userId);
 
-      // In a production app, we'd get a real payment method ID
-      // For development, we'll create a mock payment success
-      // const paymentMethodId = req.body.paymentMethodId;
-      const paymentMethodId = 'pm_mock_successful_payment';
-
-      const userId = req.user.id;
-
-      // For development: Skip actual payment processing
-      // Mock successful payment intent
-      const mockPaymentIntent = {
-        id: `pi_mock_${Date.now()}`,
-        status: 'succeeded',
-        amount: priceInCents,
-        currency: 'usd',
-        created: Date.now() / 1000
-      };
-
-      // In production, we would create a real payment intent:
-      // const paymentIntent = await createPaymentIntent(priceInCents, 'usd', req.user.stripeCustomerId);
-
-      // Add coins to user's account
-      const success = await storage.addDasWosCoins(
-        userId,
-        amount,
-        'purchase',
-        `Purchased ${amount} DasWos Coins (${metadata?.packageName || `Package #${packageId}`})`,
-        {
-          paymentIntentId: mockPaymentIntent.id,
-          packageId,
-          ...metadata
-        }
-      );
-
-      if (success) {
+      // For non-authenticated users, just return success
+      if (!userId) {
+        console.log("Non-authenticated user, returning mock balance");
         res.json({
           success: true,
-          message: "Successfully purchased DasWos Coins",
+          message: "Successfully added DasWos Coins",
           amount,
-          balance: await storage.getUserDasWosCoins(userId)
+          balance: amount // Return the amount as the new balance
         });
-      } else {
-        res.status(500).json({ message: "Failed to add coins to your account" });
+        return;
       }
+
+      // For authenticated users, use the session to store the balance
+      // This is a simplified approach that doesn't rely on database tables
+      if (!req.session.dasWosCoins) {
+        req.session.dasWosCoins = 0;
+      }
+
+      // Initialize transactions array if it doesn't exist
+      if (!req.session.dasWosCoinsTransactions) {
+        req.session.dasWosCoinsTransactions = [];
+      }
+
+      // Add the coins to the session
+      req.session.dasWosCoins += amount;
+
+      // Record the transaction
+      const transaction = {
+        id: Date.now(),
+        userId: userId,
+        amount: amount,
+        type: 'purchase',
+        description: `Added ${amount} DasWos Coins`,
+        status: 'completed',
+        metadata: {
+          freeCoins: true,
+          timestamp: new Date().toISOString()
+        },
+        createdAt: new Date()
+      };
+
+      // Add to transactions history
+      req.session.dasWosCoinsTransactions.unshift(transaction);
+
+      console.log("Added coins to session, new balance:", req.session.dasWosCoins);
+
+      // Return success
+      res.json({
+        success: true,
+        message: "Successfully added DasWos Coins",
+        amount,
+        balance: req.session.dasWosCoins
+      });
     } catch (error) {
       console.error('Error purchasing DasWos Coins:', error);
-      res.status(500).json({ message: "Failed to process purchase" });
+      // Send more detailed error message for debugging
+      res.status(500).json({
+        message: "Failed to process purchase",
+        error: error.message,
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      });
     }
   });
 
-  // Spend DasWos Coins (for AI Shopper)
+  // Spend DasWos Coins (for AI Shopper) - Simplified version
   app.post("/api/user/daswos-coins/spend", async (req, res) => {
     try {
       // Check if user is authenticated
@@ -3552,30 +3634,52 @@ app.post('/api/create-payment-intent', async (req, res) => {
 
       const userId = req.user.id;
 
-      // Check if user has enough coins
-      const balance = await storage.getUserDasWosCoins(userId);
+      // Use the session to store the balance
+      if (!req.session.dasWosCoins) {
+        req.session.dasWosCoins = 0;
+      }
 
-      if (balance < amount) {
+      // Initialize transactions array if it doesn't exist
+      if (!req.session.dasWosCoinsTransactions) {
+        req.session.dasWosCoinsTransactions = [];
+      }
+
+      // Check if user has enough coins
+      if (req.session.dasWosCoins < amount) {
         return res.status(400).json({
           message: "Insufficient DasWos Coins balance",
-          balance,
+          balance: req.session.dasWosCoins,
           required: amount
         });
       }
 
-      // Spend coins
-      const success = await storage.spendDasWosCoins(userId, amount, description, metadata);
+      // Spend coins by subtracting from session
+      req.session.dasWosCoins -= amount;
 
-      if (success) {
-        res.json({
-          success: true,
-          message: "Successfully spent DasWos Coins",
-          amount,
-          remainingBalance: balance - amount
-        });
-      } else {
-        res.status(500).json({ message: "Failed to spend DasWos Coins" });
-      }
+      // Record the transaction
+      const transaction = {
+        id: Date.now(),
+        userId: userId,
+        amount: amount,
+        type: 'spend',
+        description: description,
+        status: 'completed',
+        metadata: metadata || {},
+        createdAt: new Date()
+      };
+
+      // Add to transactions history
+      req.session.dasWosCoinsTransactions.unshift(transaction);
+
+      console.log(`User ${userId} spent ${amount} coins on: ${description}. New balance: ${req.session.dasWosCoins}`);
+
+      // Return success
+      res.json({
+        success: true,
+        message: "Successfully spent DasWos Coins",
+        amount,
+        balance: req.session.dasWosCoins
+      });
     } catch (error) {
       console.error('Error spending DasWos Coins:', error);
       res.status(500).json({ message: "Failed to process transaction" });
@@ -3609,19 +3713,24 @@ app.post('/api/create-payment-intent', async (req, res) => {
         return res.status(400).json({ message: "Type and description are required" });
       }
 
-      // Add coins to user's account
-      const success = await storage.addDasWosCoins(userId, amount, type, description, metadata);
-
-      if (success) {
-        res.json({
-          success: true,
-          message: "Successfully added DasWos Coins",
-          userId,
-          amount
-        });
-      } else {
-        res.status(500).json({ message: "Failed to add coins to the account" });
+      // Use the session to store the balance
+      if (!req.session.dasWosCoins) {
+        req.session.dasWosCoins = 0;
       }
+
+      // Add coins to session
+      req.session.dasWosCoins += amount;
+
+      console.log(`Admin added ${amount} coins to user ${userId}. New balance: ${req.session.dasWosCoins}`);
+
+      // Return success
+      res.json({
+        success: true,
+        message: "Successfully added DasWos Coins",
+        userId,
+        amount,
+        balance: req.session.dasWosCoins
+      });
     } catch (error) {
       console.error('Error adding DasWos Coins:', error);
       res.status(500).json({ message: "Failed to process transaction" });
@@ -3648,33 +3757,27 @@ app.post('/api/create-payment-intent', async (req, res) => {
         return res.status(400).json({ message: "Minimum swap amount is 100 DasWos Coins" });
       }
 
+      // Use the session to store the balance
+      if (!req.session.dasWosCoins) {
+        req.session.dasWosCoins = 0;
+      }
+
       // Check if user has enough coins
-      const balance = await storage.getUserDasWosCoins(userId);
-      if (balance < amount) {
+      if (req.session.dasWosCoins < amount) {
         return res.status(400).json({
           message: "Insufficient DasWos Coins balance",
-          balance,
+          balance: req.session.dasWosCoins,
           required: amount
         });
       }
 
-      // Calculate cash value (1 coin = $0.01)
-      const cashValue = amount / 100;
+      // Calculate cash value (1 coin = $1.00)
+      const cashValue = amount;
 
-      // Spend the coins first
-      const success = await storage.spendDasWosCoins(
-        userId,
-        amount,
-        `Swapped ${amount} DasWos Coins for $${cashValue.toFixed(2)}`,
-        {
-          swapType: 'coins_to_cash',
-          cashValue: cashValue
-        }
-      );
+      // Spend the coins by subtracting from session
+      req.session.dasWosCoins -= amount;
 
-      if (!success) {
-        return res.status(500).json({ message: "Failed to process coin swap" });
-      }
+      console.log(`User ${userId} swapped ${amount} coins for $${cashValue.toFixed(2)}. New balance: ${req.session.dasWosCoins}`);
 
       // In a production app, we would trigger a real payment to the user here
       // For this development implementation, we'll just simulate it
@@ -3685,7 +3788,7 @@ app.post('/api/create-payment-intent', async (req, res) => {
         message: "Successfully swapped DasWos Coins for cash",
         amount,
         cashValue: cashValue,
-        remainingBalance: balance - amount
+        balance: req.session.dasWosCoins
       });
     } catch (error) {
       console.error('Error swapping DasWos Coins for cash:', error);
@@ -4001,6 +4104,12 @@ app.post('/api/create-payment-intent', async (req, res) => {
 
   // Use information routes for information search
   app.use('/api/information', createInformationRoutes(storage));
+
+  // Use order routes for order management
+  app.use('/api/orders', createOrderRoutes(storage));
+
+  // Set up AutoShop routes
+  setupAutoShopRoutes(app, storage);
 
   // We already set up AI search routes at the beginning
   // No need to call setupAiSearchRoutes again

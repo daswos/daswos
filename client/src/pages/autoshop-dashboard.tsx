@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
-import { useAuth } from '@/hooks/use-auth';
+import { useDasWosCoins } from '@/hooks/use-daswos-coins';
 import { Bot, ShoppingBag, Clock, Check, X, AlertCircle, Package } from 'lucide-react';
 import { formatDasWosCoins, formatDate } from '@/lib/utils';
 import { DasWosCoinIcon } from '@/components/daswos-coin-icon';
@@ -9,10 +9,11 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import AutoShopStartButton from '@/components/autoshop-start-button';
 
 const AutoShopDashboard: React.FC = () => {
-  const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState('pending');
+  // Get DasWos coins balance
+  const { balance: coinsBalance } = useDasWosCoins();
 
   // Fetch AutoShop pending purchases
   const { data: pendingItems, isLoading: isPendingLoading } = useQuery({
@@ -23,7 +24,7 @@ const AutoShopDashboard: React.FC = () => {
         credentials: 'include'
       });
     },
-    enabled: !!user,
+    // Enable for all users, not just authenticated ones
     staleTime: 30000, // 30 seconds
   });
 
@@ -36,70 +37,30 @@ const AutoShopDashboard: React.FC = () => {
         credentials: 'include'
       });
     },
-    enabled: !!user,
+    // Enable for all users, not just authenticated ones
     staleTime: 60000, // 1 minute
   });
 
-  // Mock data for development (remove in production)
-  const mockPendingItems = [
-    {
-      id: '1',
-      name: 'Wireless Earbuds',
-      description: 'Noise cancelling with long battery life',
-      estimatedPrice: 5000,
-      imageUrl: 'https://via.placeholder.com/100',
-      category: 'Electronics',
-      addedAt: new Date().toISOString(),
-      status: 'pending'
-    },
-    {
-      id: '2',
-      name: 'Smart Watch',
-      description: 'Fitness tracking and notifications',
-      estimatedPrice: 8000,
-      imageUrl: 'https://via.placeholder.com/100',
-      category: 'Electronics',
-      addedAt: new Date(Date.now() - 3600000).toISOString(),
-      status: 'pending'
-    }
-  ];
-
-  const mockOrderHistory = [
-    {
-      id: '3',
-      name: 'Bluetooth Speaker',
-      description: 'Waterproof portable speaker',
-      price: 4500,
-      imageUrl: 'https://via.placeholder.com/100',
-      category: 'Electronics',
-      purchasedAt: new Date(Date.now() - 86400000).toISOString(),
-      status: 'completed'
-    },
-    {
-      id: '4',
-      name: 'Phone Charger',
-      description: 'Fast charging USB-C cable',
-      price: 1200,
-      imageUrl: 'https://via.placeholder.com/100',
-      category: 'Electronics',
-      purchasedAt: new Date(Date.now() - 172800000).toISOString(),
-      status: 'completed'
-    }
-  ];
-
-  // Use mock data if real data is not available yet
-  const displayPendingItems = pendingItems || mockPendingItems;
-  const displayOrderHistory = orderHistory || mockOrderHistory;
+  // Use empty arrays if data is not available yet
+  const displayPendingItems = pendingItems || [];
+  const displayOrderHistory = orderHistory || [];
 
   // Function to remove an item from pending purchases
   const handleRemoveItem = async (itemId: string) => {
     try {
-      await apiRequest(`/api/user/autoshop/pending/${itemId}`, {
-        method: 'DELETE',
-        credentials: 'include'
+      // Update the recommendation status to 'rejected'
+      await apiRequest(`/api/ai-shopper/recommendations/${itemId}`, {
+        method: 'PUT',
+        credentials: 'include',
+        body: JSON.stringify({
+          status: 'rejected',
+          reason: 'User removed from AutoShop dashboard',
+          removeFromList: true
+        })
       });
+
       // Refetch pending items
-      // queryClient.invalidateQueries({ queryKey: ['/api/user/autoshop/pending'] });
+      window.location.reload();
     } catch (error) {
       console.error('Error removing item:', error);
     }
@@ -108,16 +69,51 @@ const AutoShopDashboard: React.FC = () => {
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="max-w-4xl mx-auto">
-        <div className="flex items-center mb-6">
-          <Bot className="h-6 w-6 mr-2 text-blue-600" />
-          <h1 className="text-2xl font-bold">My AutoShop Dashboard</h1>
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center">
+            <Bot className="h-6 w-6 mr-2 text-blue-600" />
+            <h1 className="text-2xl font-bold">My AutoShop Dashboard</h1>
+          </div>
+          <div className="flex items-center">
+            <DasWosCoinIcon className="h-5 w-5 mr-2 text-primary" />
+            <span className="font-medium">{formatDasWosCoins(coinsBalance)}</span>
+            <Button
+              variant="link"
+              className="ml-2 text-sm text-blue-600 hover:text-blue-800"
+              onClick={() => window.location.href = '/daswos-coins'}
+            >
+              Purchase Coins
+            </Button>
+          </div>
         </div>
 
-        <p className="text-gray-600 dark:text-gray-300 mb-8">
+        <p className="text-gray-600 dark:text-gray-300 mb-4">
           View and manage your AutoShop AI purchases. See what items are pending purchase and your order history.
         </p>
 
-        <Tabs defaultValue="pending" className="w-full" onValueChange={setActiveTab}>
+        {coinsBalance === 0 && (
+          <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <DasWosCoinIcon className="h-5 w-5 text-yellow-400" />
+              </div>
+              <div className="ml-3">
+                <p className="text-sm text-yellow-700">
+                  You currently have 0 DasWos Coins. AutoShop requires coins to make purchases on your behalf.
+                  <Button
+                    variant="link"
+                    className="ml-1 text-sm text-blue-600 hover:text-blue-800 p-0"
+                    onClick={() => window.location.href = '/daswos-coins'}
+                  >
+                    Purchase coins now
+                  </Button>
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <Tabs defaultValue="pending" className="w-full">
           <TabsList className="grid w-full grid-cols-2 mb-8">
             <TabsTrigger value="pending" className="text-sm">
               <Clock className="h-4 w-4 mr-2" />
@@ -163,6 +159,9 @@ const AutoShopDashboard: React.FC = () => {
                   <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">
                     AutoShop hasn't selected any items for purchase yet.
                   </p>
+                  <div className="mt-4">
+                    <AutoShopStartButton className="mx-auto" />
+                  </div>
                 </div>
               ) : (
                 <div className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -249,6 +248,9 @@ const AutoShopDashboard: React.FC = () => {
                   <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">
                     AutoShop hasn't purchased any items for you yet.
                   </p>
+                  <div className="mt-4">
+                    <AutoShopStartButton className="mx-auto" />
+                  </div>
                 </div>
               ) : (
                 <div className="divide-y divide-gray-200 dark:divide-gray-700">

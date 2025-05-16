@@ -33,7 +33,7 @@
 
 /* Back button styling */
 .back-button {
-  background-color: white;
+  background-color: #E0E0E0;
   color: #000000;
   border: 1px solid #d1d5db;
   display: flex;
@@ -42,12 +42,12 @@
 }
 
 .back-button:hover {
-  background-color: #f3f4f6;
+  background-color: #d0d0d0;
 }
 
 /* Forward button styling */
 .forward-button {
-  background-color: white;
+  background-color: #E0E0E0;
   color: #000000;
   border: 1px solid #d1d5db;
   display: flex;
@@ -56,7 +56,7 @@
 }
 
 .forward-button:hover {
-  background-color: #f3f4f6;
+  background-color: #d0d0d0;
 }
 
 /* Dasbar item styling */

@@ -1,13 +1,20 @@
 import {
   products, type Product,
   users, type User, type InsertUser,
-  informationContent, type InformationContent
+  informationContent, type InformationContent,
+  aiShopperRecommendations, type AiShopperRecommendation, type InsertAiShopperRecommendation,
+  categories
 } from "@shared/schema";
 import connectPg from "connect-pg-simple";
 import session from "express-session";
 import memorystore from "memorystore";
 import { db } from "./db";
-import { eq, or, and, sql, ilike } from "drizzle-orm";
+import { eq, or, and, sql, ilike, like, desc, gte } from "drizzle-orm";
+import {
+  userPurchaseHistory,
+  userSearchHistory,
+  userProductPreferences
+} from "@shared/user-history-schema";
 import { log } from "./vite";
 // Simplified FallbackStorage class that implements the streamlined IStorage interface
 export class FallbackStorage implements IStorage {
@@ -81,7 +88,7 @@ export class FallbackStorage implements IStorage {
   }
 
   // Product operations
-  async getProducts(sphere: string, query?: string): Promise<Product[]> {
+  async getProducts(sphere: string, query?: string, categories?: string[]): Promise<Product[]> {
     // Use a type assertion to handle the custom 'sphere' property
     let filteredProducts = this.products.filter(product => {
       const productWithSphere = product as unknown as { sphere: string };
@@ -97,11 +104,32 @@ export class FallbackStorage implements IStorage {
       );
     }
 
+    // Filter by categories if provided
+    if (categories && categories.length > 0) {
+      filteredProducts = filteredProducts.filter(product => {
+        // Check if product has a category that matches any of the provided categories
+        if (product.categoryId) {
+          // In fallback storage, we don't have actual category IDs, so we'll use the ai_attributes
+          const aiAttributes = product.aiAttributes as any;
+          if (aiAttributes && aiAttributes.category) {
+            return categories.some(category =>
+              aiAttributes.category.toLowerCase() === category.toLowerCase()
+            );
+          }
+        }
+        return false;
+      });
+    }
+
     return filteredProducts;
   }
 
   async getProductById(id: number): Promise<Product | undefined> {
     return this.products.find(product => product.id === id);
+  }
+
+  async getProductsByCategory(categoryName: string): Promise<Product[]> {
+    return this.getProducts('all', '', [categoryName]);
   }
 
   // Information content operations
@@ -217,16 +245,81 @@ export class FallbackStorage implements IStorage {
 
   // AI operations
   async generateAiRecommendations(
+    userId: number | null,
+    preferredCategories?: string[],
+    minPrice?: number,
+    maxPrice?: number,
+    useRandomMode?: boolean
+  ): Promise<any[]> {
+    // In fallback storage, return empty array
+    return [];
+  }
+
+  async getAiRecommendations(userId: number | null): Promise<any[]> {
+    // In fallback storage, return empty array
+    return [];
+  }
+
+  // User history operations
+  async addUserPurchaseHistory(
     userId: number,
-    searchQuery?: string,
-    isBulkBuy?: boolean,
-    searchHistory?: string[],
-    shoppingList?: string
-  ): Promise<{ success: boolean; message: string; }> {
-    // In the fallback storage, we just return a success message
+    productId: number,
+    categoryId: number | null,
+    price: number,
+    quantity?: number
+  ): Promise<any> {
+    // In fallback storage, return mock data
     return {
-      success: true,
-      message: 'AI recommendations generated successfully (fallback mode)'
+      id: 1,
+      userId,
+      productId,
+      categoryId,
+      price,
+      quantity: quantity || 1,
+      purchaseDate: new Date()
+    };
+  }
+
+  async getUserPurchaseHistory(userId: number, limit?: number): Promise<any[]> {
+    // In fallback storage, return empty array
+    return [];
+  }
+
+  async addUserSearchHistory(
+    userId: number,
+    searchQuery: string,
+    categoryId?: number | null,
+    clickedProductId?: number | null
+  ): Promise<any> {
+    // In fallback storage, return mock data
+    return {
+      id: 1,
+      userId,
+      searchQuery,
+      categoryId: categoryId || null,
+      clickedProductId: clickedProductId || null,
+      searchDate: new Date()
+    };
+  }
+
+  async getUserSearchHistory(userId: number, limit?: number): Promise<any[]> {
+    // In fallback storage, return empty array
+    return [];
+  }
+
+  async getUserProductPreferences(userId: number): Promise<any[]> {
+    // In fallback storage, return empty array
+    return [];
+  }
+
+  async updateUserProductPreference(userId: number, categoryId: number, preferenceScore: number): Promise<any> {
+    // In fallback storage, return mock data
+    return {
+      id: 1,
+      userId,
+      categoryId,
+      preferenceScore,
+      lastUpdated: new Date()
     };
   }
 }
@@ -263,8 +356,9 @@ export interface IStorage {
   getUserSubscriptionDetails(userId: number): Promise<{hasSubscription: boolean, type?: string, expiresAt?: Date}>;
 
   // Product related operations
-  getProducts(sphere: string, query?: string): Promise<Product[]>;
+  getProducts(sphere: string, query?: string, categories?: string[]): Promise<Product[]>;
   getProductById(id: number): Promise<Product | undefined>;
+  getProductsByCategory(categoryName: string): Promise<Product[]>;
 
   // Information content operations
   getInformationContent(query?: string, category?: string): Promise<InformationContent[]>;
@@ -272,12 +366,24 @@ export interface IStorage {
 
   // AI operations
   generateAiRecommendations(
-    userId: number,
-    searchQuery?: string,
-    isBulkBuy?: boolean,
-    searchHistory?: string[],
-    shoppingList?: string
-  ): Promise<{ success: boolean; message: string; }>;
+    userId: number | null,
+    preferredCategories?: string[],
+    minPrice?: number,
+    maxPrice?: number,
+    useRandomMode?: boolean
+  ): Promise<any[]>;
+
+  getAiRecommendations(userId: number | null): Promise<any[]>;
+
+  // User history operations
+  addUserPurchaseHistory(userId: number, productId: number, categoryId: number | null, price: number, quantity?: number): Promise<any>;
+  getUserPurchaseHistory(userId: number, limit?: number): Promise<any[]>;
+
+  addUserSearchHistory(userId: number, searchQuery: string, categoryId?: number | null, clickedProductId?: number | null): Promise<any>;
+  getUserSearchHistory(userId: number, limit?: number): Promise<any[]>;
+
+  getUserProductPreferences(userId: number): Promise<any[]>;
+  updateUserProductPreference(userId: number, categoryId: number, preferenceScore: number): Promise<any>;
 }
 
 // Database storage implementation
@@ -641,7 +747,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Product operations
-  async getProducts(sphere: string, query?: string): Promise<Product[]> {
+  async getProducts(sphere: string, query?: string, categories?: string[]): Promise<Product[]> {
+    console.log(`getProducts called with sphere=${sphere}, query=${query || 'none'}, categories=${categories ? categories.join(',') : 'none'}`);
+
     let conditions = [];
 
     // Handle different sphere combinations
@@ -651,6 +759,7 @@ export class DatabaseStorage implements IStorage {
       // Additional criteria for SafeSphere: Trust score must be at least 80
       // AND seller must have provided all required verification information
       conditions.push(gte(products.trustScore, 80));
+      console.log('Added SafeSphere conditions: sellerVerified=true, trustScore>=80');
     } else if (sphere === 'bulkbuy-safe') {
       // BulkBuy with SafeSphere filter - both bulk buy eligible AND verified sellers
       conditions.push(eq(products.isBulkBuy, true));
@@ -658,12 +767,15 @@ export class DatabaseStorage implements IStorage {
       // Additional criteria for SafeSphere: Trust score must be at least 80
       // AND seller must have provided all required verification information
       conditions.push(gte(products.trustScore, 80));
+      console.log('Added BulkBuy-Safe conditions: isBulkBuy=true, sellerVerified=true, trustScore>=80');
     } else if (sphere === 'bulkbuy-open') {
       // BulkBuy with OpenSphere filter - just bulk buy eligible, any seller
       conditions.push(eq(products.isBulkBuy, true));
+      console.log('Added BulkBuy-Open conditions: isBulkBuy=true');
     } else if (sphere === 'bulkbuy') {
       // Original BulkBuy sphere, used for backward compatibility
       conditions.push(eq(products.isBulkBuy, true));
+      console.log('Added BulkBuy conditions: isBulkBuy=true');
     }
 
     // Filter by search query
@@ -678,13 +790,57 @@ export class DatabaseStorage implements IStorage {
       );
     }
 
-    // Build the query with all conditions
-    if (conditions.length > 0) {
-      return await db.select().from(products).where(and(...conditions));
+    // Filter by categories if provided
+    if (categories && categories.length > 0) {
+      console.log(`Filtering by categories: ${categories.join(', ')}`);
+
+      // Get category IDs for the provided category names
+      const categoryIds = await this.getCategoryIdsByNames(categories);
+      console.log(`Found category IDs: ${categoryIds.join(', ')}`);
+
+      if (categoryIds.length > 0) {
+        conditions.push(
+          or(
+            ...categoryIds.map(id => eq(products.categoryId, id))
+          )
+        );
+        console.log(`Added category filter conditions for IDs: ${categoryIds.join(', ')}`);
+      } else {
+        console.log('WARNING: No matching category IDs found in the database');
+      }
     }
 
-    // No conditions means return all products
-    return await db.select().from(products);
+    // Build the query with all conditions
+    try {
+      let result;
+      if (conditions.length > 0) {
+        console.log(`Executing query with ${conditions.length} conditions`);
+        result = await db.select().from(products).where(and(...conditions));
+      } else {
+        // If no conditions, return all products
+        console.log('Executing query with no conditions (returning all products)');
+        result = await db.select().from(products);
+      }
+
+      console.log(`Query returned ${result.length} products`);
+
+      // Log a sample of the products
+      if (result.length > 0) {
+        console.log('Sample product:', {
+          id: result[0].id,
+          title: result[0].title,
+          price: result[0].price,
+          categoryId: result[0].categoryId,
+          sellerVerified: result[0].sellerVerified,
+          trustScore: result[0].trustScore
+        });
+      }
+
+      return result;
+    } catch (error) {
+      console.error('Error executing product query:', error);
+      return [];
+    }
   }
 
   async getProductById(id: number): Promise<Product | undefined> {
@@ -699,6 +855,214 @@ export class DatabaseStorage implements IStorage {
 
   async getProductsBySellerId(sellerId: number): Promise<Product[]> {
     return await db.select().from(products).where(eq(products.sellerId, sellerId));
+  }
+
+  // Get category IDs by names
+  async getCategoryIdsByNames(categoryNames: string[]): Promise<number[]> {
+    console.log(`getCategoryIdsByNames called with: ${categoryNames ? categoryNames.join(', ') : 'none'}`);
+
+    if (!categoryNames || categoryNames.length === 0) {
+      console.log('No category names provided, returning empty array');
+      return [];
+    }
+
+    try {
+      // First, let's check what categories exist in the database
+      const allCategories = await db.select().from(categories);
+      console.log(`Database has ${allCategories.length} categories:`);
+      allCategories.forEach(cat => {
+        console.log(`- Category ID: ${cat.id}, Name: ${cat.name}`);
+      });
+
+      // Now query for the specific categories
+      const categoryRows = await db
+        .select({ id: categories.id, name: categories.name })
+        .from(categories)
+        .where(
+          or(...categoryNames.map(name => eq(categories.name, name)))
+        );
+
+      console.log(`Found ${categoryRows.length} matching categories:`);
+      categoryRows.forEach(cat => {
+        console.log(`- Category ID: ${cat.id}, Name: ${cat.name}`);
+      });
+
+      return categoryRows.map(row => row.id);
+    } catch (error) {
+      console.error('Error getting category IDs by names:', error);
+      return [];
+    }
+  }
+
+  // Get products by category
+  async getProductsByCategory(categoryName: string): Promise<Product[]> {
+    try {
+      // First get the category ID
+      const [category] = await db
+        .select()
+        .from(categories)
+        .where(eq(categories.name, categoryName));
+
+      if (!category) {
+        return [];
+      }
+
+      // Then get products with that category ID
+      return await db
+        .select()
+        .from(products)
+        .where(eq(products.categoryId, category.id));
+    } catch (error) {
+      console.error('Error getting products by category:', error);
+      return [];
+    }
+  }
+
+  // User history operations
+  async addUserPurchaseHistory(
+    userId: number,
+    productId: number,
+    categoryId: number | null,
+    price: number,
+    quantity: number = 1
+  ): Promise<any> {
+    try {
+      const [record] = await db.insert(userPurchaseHistory).values({
+        userId,
+        productId,
+        categoryId,
+        price,
+        quantity,
+        purchaseDate: new Date()
+      }).returning();
+
+      return record;
+    } catch (error) {
+      console.error('Error adding user purchase history:', error);
+      throw error;
+    }
+  }
+
+  async getUserPurchaseHistory(userId: number, limit: number = 50): Promise<any[]> {
+    try {
+      const history = await db
+        .select()
+        .from(userPurchaseHistory)
+        .where(eq(userPurchaseHistory.userId, userId))
+        .orderBy(desc(userPurchaseHistory.purchaseDate))
+        .limit(limit);
+
+      return history;
+    } catch (error) {
+      console.error('Error getting user purchase history:', error);
+      return [];
+    }
+  }
+
+  async addUserSearchHistory(
+    userId: number,
+    searchQuery: string,
+    categoryId: number | null = null,
+    clickedProductId: number | null = null
+  ): Promise<any> {
+    try {
+      const [record] = await db.insert(userSearchHistory).values({
+        userId,
+        searchQuery,
+        categoryId,
+        clickedProductId,
+        searchDate: new Date()
+      }).returning();
+
+      return record;
+    } catch (error) {
+      console.error('Error adding user search history:', error);
+      throw error;
+    }
+  }
+
+  async getUserSearchHistory(userId: number, limit: number = 50): Promise<any[]> {
+    try {
+      const history = await db
+        .select()
+        .from(userSearchHistory)
+        .where(eq(userSearchHistory.userId, userId))
+        .orderBy(desc(userSearchHistory.searchDate))
+        .limit(limit);
+
+      return history;
+    } catch (error) {
+      console.error('Error getting user search history:', error);
+      return [];
+    }
+  }
+
+  async getUserProductPreferences(userId: number): Promise<any[]> {
+    try {
+      const preferences = await db
+        .select({
+          id: userProductPreferences.id,
+          userId: userProductPreferences.userId,
+          categoryId: userProductPreferences.categoryId,
+          preferenceScore: userProductPreferences.preferenceScore,
+          lastUpdated: userProductPreferences.lastUpdated,
+          categoryName: categories.name
+        })
+        .from(userProductPreferences)
+        .leftJoin(categories, eq(userProductPreferences.categoryId, categories.id))
+        .where(eq(userProductPreferences.userId, userId))
+        .orderBy(desc(userProductPreferences.preferenceScore));
+
+      return preferences;
+    } catch (error) {
+      console.error('Error getting user product preferences:', error);
+      return [];
+    }
+  }
+
+  async updateUserProductPreference(userId: number, categoryId: number, preferenceScore: number): Promise<any> {
+    try {
+      // Check if preference already exists
+      const [existingPreference] = await db
+        .select()
+        .from(userProductPreferences)
+        .where(
+          and(
+            eq(userProductPreferences.userId, userId),
+            eq(userProductPreferences.categoryId, categoryId)
+          )
+        );
+
+      if (existingPreference) {
+        // Update existing preference
+        const [updatedPreference] = await db
+          .update(userProductPreferences)
+          .set({
+            preferenceScore,
+            lastUpdated: new Date()
+          })
+          .where(eq(userProductPreferences.id, existingPreference.id))
+          .returning();
+
+        return updatedPreference;
+      } else {
+        // Create new preference
+        const [newPreference] = await db
+          .insert(userProductPreferences)
+          .values({
+            userId,
+            categoryId,
+            preferenceScore,
+            lastUpdated: new Date()
+          })
+          .returning();
+
+        return newPreference;
+      }
+    } catch (error) {
+      console.error('Error updating user product preference:', error);
+      throw error;
+    }
   }
 
   // Search operations
@@ -1460,199 +1824,251 @@ export class DatabaseStorage implements IStorage {
     return recommendation;
   }
 
-  async generateAiRecommendations(
-    userId: number,
-    searchQuery?: string,
-    isBulkBuy: boolean = false,
-    searchHistory?: string[],
-    shoppingList?: string
-  ): Promise<{ success: boolean; message: string; }> {
+  async getAiRecommendations(userId: number | null): Promise<any[]> {
     try {
-      // For anonymous users or when enabling Super Shopper for all users,
-      // we'll use default settings instead of checking user status
-      const { settings } = await this.getAiShopperStatus(userId);
+      if (userId === null) {
+        // For anonymous users, return empty array
+        return [];
+      }
 
-      // We're skipping the AI Shopper enabled check since we want all users to access it
+      // Get recommendations for the user
+      const recommendations = await db
+        .select({
+          id: aiShopperRecommendations.id,
+          userId: aiShopperRecommendations.userId,
+          productId: aiShopperRecommendations.productId,
+          reason: aiShopperRecommendations.reason,
+          confidence: aiShopperRecommendations.confidence,
+          status: aiShopperRecommendations.status,
+          createdAt: aiShopperRecommendations.createdAt,
+          updatedAt: aiShopperRecommendations.updatedAt
+        })
+        .from(aiShopperRecommendations)
+        .where(eq(aiShopperRecommendations.userId, userId))
+        .orderBy(desc(aiShopperRecommendations.createdAt));
 
-      // We're skipping the subscription check since we want all users to access it
+      // Get product details for each recommendation
+      const recommendationsWithProducts = await Promise.all(
+        recommendations.map(async (rec) => {
+          const product = await this.getProductById(rec.productId);
+          return {
+            ...rec,
+            product
+          };
+        })
+      );
 
-      console.log(`Generating AI recommendations for user ${userId}, search query: "${searchQuery}", bulk buy: ${isBulkBuy}`);
+      return recommendationsWithProducts.filter(rec => rec.product !== undefined);
+    } catch (error) {
+      console.error('Error getting AI recommendations:', error);
+      return [];
+    }
+  }
 
-      // Step 4: Get SafeSphere products that match user's preferences
-      // Filter products based on preferred categories and avoided tags
-      const preferredCategories = settings.preferredCategories || [];
-      const avoidTags = settings.avoidTags || [];
-      const minimumTrustScore = settings.minimumTrustScore || 85;
+  async generateAiRecommendations(
+    userId: number | null,
+    preferredCategories: string[] = [],
+    minPrice: number = 0,
+    maxPrice: number = 100000,
+    useRandomMode: boolean = false,
+    useSafeSphere: boolean = false
+  ): Promise<any[]> {
+    try {
+      console.log(`Generating AI recommendations for user ${userId || 'anonymous'}`);
+      console.log(`Parameters: categories=${preferredCategories.join(',')}, price range=${minPrice}-${maxPrice}, random=${useRandomMode}, safeSphere=${useSafeSphere}`);
 
-      // Get potential products matching the criteria from either bulk buy or standard products
-      let sphere = isBulkBuy ? 'bulkbuy-safe' : 'safesphere';
-      let potentialProducts = await this.getProducts(sphere, searchQuery);
+      // Step 1: Get products based on categories and price range
+      let sphere = useSafeSphere ? 'safesphere' : 'opensphere'; // Use SafeSphere only when explicitly requested
+      let potentialProducts;
 
-      console.log(`Found ${potentialProducts.length} potential products for ${sphere}${searchQuery ? ' with query: ' + searchQuery : ''}`);
+      // If categories are specified, try to get products by category
+      if (preferredCategories && preferredCategories.length > 0) {
+        console.log(`Trying to get products by categories: ${preferredCategories.join(', ')}`);
 
-      // Filter products by trust score
-      potentialProducts = potentialProducts.filter(product => {
-        // Ensure the product has a valid trust score (fix for the 0 score issue)
-        if (!product.trustScore || product.trustScore <= 0) {
-          console.log(`Product ${product.id} has invalid trust score: ${product.trustScore}`);
-          return false;
+        // Get all products first
+        potentialProducts = await this.getProducts(sphere);
+        console.log(`Found ${potentialProducts.length} total products in SafeSphere`);
+
+        // Check if categories exist in the database
+        const categoryIds = await this.getCategoryIdsByNames(preferredCategories);
+        console.log(`Found ${categoryIds.length} matching category IDs: ${categoryIds.join(', ')}`);
+
+        if (categoryIds.length > 0) {
+          // Filter products by category IDs
+          potentialProducts = potentialProducts.filter(product =>
+            categoryIds.includes(product.categoryId)
+          );
+          console.log(`After category filtering: ${potentialProducts.length} products`);
+        } else {
+          // If no matching categories, log a warning but continue with all products
+          console.log('WARNING: No matching categories found in database. Using all products.');
         }
-        return product.trustScore >= minimumTrustScore;
-      });
-
-      // Filter by preferred categories if specified
-      if (preferredCategories.length > 0) {
-        potentialProducts = potentialProducts.filter(product =>
-          product.tags.some(tag => preferredCategories.includes(tag))
-        );
+      } else {
+        // No categories specified, get all products
+        potentialProducts = await this.getProducts(sphere);
+        console.log(`No categories specified. Found ${potentialProducts.length} total products in SafeSphere`);
       }
 
-      // Filter out products with avoided tags
-      if (avoidTags.length > 0) {
-        potentialProducts = potentialProducts.filter(product =>
-          !product.tags.some(tag => avoidTags.includes(tag))
-        );
-      }
+      // Filter by price range
+      potentialProducts = potentialProducts.filter(product =>
+        product.price >= minPrice && product.price <= maxPrice
+      );
+
+      console.log(`After price filtering: ${potentialProducts.length} potential products matching criteria`);
 
       if (potentialProducts.length === 0) {
-        return {
-          success: false,
-          message: "No products found matching your preferences"
-        };
+        console.log('No products found matching criteria');
+        return [];
       }
 
-      // Step 5: Use Anthropic AI to generate recommendations
-      const budgetLimit = settings.budgetLimit / 100; // Convert from cents to dollars/pounds
+      // Step 2: If user is logged in, use their history to personalize recommendations
+      let selectedProducts = [];
 
-      try {
-        // First try to use the new Anthropic API if available
-        let productId, confidence, reasoning;
-        let alternativeRecommendations = {};
-        let enhancedConfidenceScores = {};
+      if (userId !== null && !useRandomMode) {
+        // Get user's purchase history
+        const purchaseHistory = await this.getUserPurchaseHistory(userId);
 
-        try {
-          // Try to use the enhanced Anthropic API integration
-          const { enhanceAiRecommendations } = await import('./anthropic-api');
+        // Get user's search history
+        const searchHistory = await this.getUserSearchHistory(userId);
 
-          // Check if we have access to the Anthropic API
-          if (process.env.ANTHROPIC_API_KEY) {
-            console.log('Using enhanced Anthropic API integration for recommendations');
+        // Get user's product preferences
+        const productPreferences = await this.getUserProductPreferences(userId);
 
-            // Get enhanced recommendations and confidence scores
-            const { enhancedReasons, confidenceScores } = await enhanceAiRecommendations(
-              searchQuery || "",
-              settings,
-              potentialProducts,
-              searchHistory || [],
-              shoppingList || ""
-            );
+        if (purchaseHistory.length > 0 || searchHistory.length > 0 || productPreferences.length > 0) {
+          console.log('Using user history for personalized recommendations');
 
-            // Store the enhanced results
-            alternativeRecommendations = enhancedReasons;
-            enhancedConfidenceScores = confidenceScores;
+          // Create a scoring system for products based on user history
+          const productScores = new Map<number, number>();
 
-            // If we got valid results, use the product with highest confidence
-            if (Object.keys(confidenceScores).length > 0) {
-              const productIds = Object.keys(confidenceScores).map(Number);
-              const bestProductId = productIds.reduce((a, b) =>
-                confidenceScores[a] > confidenceScores[b] ? a : b
-              );
+          // Initialize scores for all potential products
+          potentialProducts.forEach(product => {
+            productScores.set(product.id, 0);
+          });
 
-              productId = bestProductId;
-              confidence = confidenceScores[productId] || 0.85; // Default to 0.85 if undefined
-              reasoning = enhancedReasons[productId] || `This product matches your search query.`;
+          // Score based on purchase history
+          purchaseHistory.forEach(purchase => {
+            // Boost products in the same category
+            potentialProducts.forEach(product => {
+              if (product.categoryId === purchase.categoryId) {
+                const currentScore = productScores.get(product.id) || 0;
+                productScores.set(product.id, currentScore + 5);
+              }
+            });
+          });
 
-              console.log(`Selected best product ID ${productId} with confidence ${confidence}`);
-            }
-          }
-        } catch (anthropicApiError) {
-          console.error('Error using enhanced Anthropic API:', anthropicApiError);
-          // Continue to fallback method
-        }
+          // Score based on search history
+          searchHistory.forEach(search => {
+            // Boost products that match search terms
+            const searchTerms = search.searchQuery.toLowerCase().split(' ');
+            potentialProducts.forEach(product => {
+              const titleWords = product.title.toLowerCase().split(' ');
+              const descriptionWords = product.description.toLowerCase().split(' ');
 
-        // If we couldn't use the enhanced API or it failed, fall back to the original implementation
-        if (!productId || isNaN(productId)) {
-          console.log('Falling back to original Anthropic implementation');
+              // Check for matches in title and description
+              searchTerms.forEach(term => {
+                if (titleWords.some(word => word.includes(term))) {
+                  const currentScore = productScores.get(product.id) || 0;
+                  productScores.set(product.id, currentScore + 3);
+                }
 
-          // Import the original Anthropic service to avoid circular dependencies
-          const { generateRecommendation } = await import('./anthropic');
-
-          // Pass search history and shopping list to the AI for better recommendations
-          const result = await generateRecommendation(
-            settings,
-            budgetLimit,
-            potentialProducts,
-            searchHistory || [],
-            shoppingList || ""
-          );
-
-          // Extract data from the result
-          productId = parseInt(result.recommendation, 10);
-          confidence = result.confidence;
-          reasoning = result.reasoning;
-
-          if (isNaN(productId)) {
-            throw new Error(`Invalid product ID: ${result.recommendation}`);
-          }
-        }
-
-        // Validate that the product exists
-        const product = await this.getProductById(productId);
-        if (!product) {
-          throw new Error(`Product with ID ${productId} not found`);
-        }
-
-        // Create the recommendation with type safety
-        await this.createAiShopperRecommendation({
-          userId,
-          productId,
-          reason: reasoning || "This product matches your preferences.",
-          confidence: confidence !== undefined ? Math.round(confidence * 100) : 85 // Convert from 0-1 to 0-100, default to 85 if undefined
-        });
-
-        // Check if auto-purchase is enabled and confidence is high enough
-        const confidenceValue = confidence !== undefined ? confidence : 0.85; // Default to 0.85 if undefined
-        if (settings.autoPurchase && settings.autoPaymentEnabled && confidenceValue >= (settings.confidenceThreshold || 0.85)) {
-          // Get the recommendation ID
-          const [newRecommendation] = await db
-            .select()
-            .from(aiShopperRecommendations)
-            .where(and(
-              eq(aiShopperRecommendations.userId, userId),
-              eq(aiShopperRecommendations.productId, productId)
-            ))
-            .orderBy(desc(aiShopperRecommendations.createdAt))
-            .limit(1);
-
-          if (newRecommendation) {
-            // Process the auto-purchase asynchronously
-            this.processAutoPurchase(newRecommendation.id)
-              .then(result => {
-                console.log(`Auto-purchase result for recommendation ${newRecommendation.id}:`, result);
-              })
-              .catch(err => {
-                console.error(`Auto-purchase failed for recommendation ${newRecommendation.id}:`, err);
+                if (descriptionWords.some(word => word.includes(term))) {
+                  const currentScore = productScores.get(product.id) || 0;
+                  productScores.set(product.id, currentScore + 1);
+                }
               });
-          }
-        }
 
-        return {
-          success: true,
-          message: "AI Shopper has generated new recommendations"
-        };
-      } catch (error) {
-        console.error('Error generating AI recommendation:', error);
-        return {
-          success: false,
-          message: `Failed to generate recommendation: ${error instanceof Error ? error.message : String(error)}`
-        };
+              // Boost products in the same category as clicked products
+              if (search.clickedProductId && search.categoryId && product.categoryId === search.categoryId) {
+                const currentScore = productScores.get(product.id) || 0;
+                productScores.set(product.id, currentScore + 4);
+              }
+            });
+          });
+
+          // Score based on product preferences
+          productPreferences.forEach(preference => {
+            potentialProducts.forEach(product => {
+              if (product.categoryId === preference.categoryId) {
+                const currentScore = productScores.get(product.id) || 0;
+                productScores.set(product.id, currentScore + (preference.preferenceScore * 2));
+              }
+            });
+          });
+
+          // Sort products by score
+          const scoredProducts = potentialProducts.map(product => ({
+            product,
+            score: productScores.get(product.id) || 0
+          }));
+
+          scoredProducts.sort((a, b) => b.score - a.score);
+
+          // Select top 5 products
+          selectedProducts = scoredProducts.slice(0, 5).map(item => item.product);
+
+          console.log(`Selected ${selectedProducts.length} products based on user history`);
+        } else {
+          console.log('No user history found, using random selection');
+          // Fall back to random selection if no history
+          selectedProducts = this.getRandomProducts(potentialProducts, 5);
+        }
+      } else {
+        console.log('Using random selection mode');
+        // For anonymous users or random mode, select random products
+        selectedProducts = this.getRandomProducts(potentialProducts, 5);
       }
+
+      // Step 3: Create recommendations for the selected products
+      const recommendations = [];
+
+      for (const product of selectedProducts) {
+        try {
+          // Create a recommendation
+          const [recommendation] = await db.insert(aiShopperRecommendations).values({
+            userId: userId || 1, // Use default user ID 1 for anonymous users
+            productId: product.id,
+            reason: `This product matches your preferences in the ${product.categoryId ? await this.getCategoryName(product.categoryId) : 'selected'} category.`,
+            confidence: 85, // Default confidence
+            status: 'pending',
+            createdAt: new Date(),
+            updatedAt: new Date()
+          }).returning();
+
+          // Add product details to the recommendation
+          recommendations.push({
+            ...recommendation,
+            product
+          });
+        } catch (error) {
+          console.error(`Error creating recommendation for product ${product.id}:`, error);
+        }
+      }
+
+      return recommendations;
     } catch (error) {
       console.error('Error in generateAiRecommendations:', error);
-      return {
-        success: false,
-        message: `An unexpected error occurred: ${error instanceof Error ? error.message : String(error)}`
-      };
+      return [];
+    }
+  }
+
+  // Helper method to get random products
+  private getRandomProducts(products: Product[], count: number): Product[] {
+    const shuffled = [...products].sort(() => 0.5 - Math.random());
+    return shuffled.slice(0, count);
+  }
+
+  // Helper method to get category name by ID
+  private async getCategoryName(categoryId: number): Promise<string> {
+    try {
+      const [category] = await db
+        .select({ name: categories.name })
+        .from(categories)
+        .where(eq(categories.id, categoryId));
+
+      return category?.name || 'Unknown';
+    } catch (error) {
+      console.error(`Error getting category name for ID ${categoryId}:`, error);
+      return 'Unknown';
     }
   }
 
@@ -1707,24 +2123,27 @@ export class DatabaseStorage implements IStorage {
 
       // Step 6: Check if user has chosen to use DasWos Coins
       if (settings.useCoins) {
+        // Convert product price from cents to dollars for DasWos Coins (1 coin = $1)
+        const priceInCoins = Math.ceil(product.price / 100);
+
         // Check if user has enough DasWos Coins
         const userCoins = await this.getUserDasWosCoins(recommendation.userId);
-        if (userCoins < product.price) {
+        if (userCoins < priceInCoins) {
           await this.updateAiShopperRecommendationStatus(
             recommendationId,
             'rejected',
-            `Not enough DasWos Coins. Required: ${product.price}, Available: ${userCoins}`
+            `Not enough DasWos Coins. Required: ${priceInCoins}, Available: ${userCoins}`
           );
           return {
             success: false,
-            message: `Not enough DasWos Coins. Required: ${product.price}, Available: ${userCoins}`
+            message: `Not enough DasWos Coins. Required: ${priceInCoins}, Available: ${userCoins}`
           };
         }
 
-        // Spend DasWos Coins for the purchase
+        // Spend DasWos Coins for the purchase (1 coin = $1)
         const coinSpent = await this.spendDasWosCoins(
           recommendation.userId,
-          product.price,
+          priceInCoins,
           `Auto-purchase: ${product.title}`,
           {
             productId: product.id,
@@ -1758,7 +2177,7 @@ export class DatabaseStorage implements IStorage {
 
         return {
           success: true,
-          message: `Auto-purchased ${product.title} for ${product.price} DasWos Coins`
+          message: `Auto-purchased ${product.title} for ${priceInCoins} DasWos Coins`
         };
       } else {
         // Step 7: Process with payment method if not using coins
@@ -3365,11 +3784,11 @@ export class HybridStorage implements IStorage {
   }
 
   // Product operations
-  async getProducts(sphere: string, query?: string): Promise<Product[]> {
+  async getProducts(sphere: string, query?: string, categories?: string[]): Promise<Product[]> {
     return this.executeWithFallback(
       'getProducts',
-      () => this.primaryStorage.getProducts(sphere, query),
-      () => this.fallbackStorage.getProducts(sphere, query)
+      () => this.primaryStorage.getProducts(sphere, query, categories),
+      () => this.fallbackStorage.getProducts(sphere, query, categories)
     );
   }
 
@@ -3378,6 +3797,97 @@ export class HybridStorage implements IStorage {
       'getProductById',
       () => this.primaryStorage.getProductById(id),
       () => this.fallbackStorage.getProductById(id)
+    );
+  }
+
+  async getProductsByCategory(categoryName: string): Promise<Product[]> {
+    return this.executeWithFallback(
+      'getProductsByCategory',
+      () => this.primaryStorage.getProductsByCategory(categoryName),
+      () => this.fallbackStorage.getProducts('all', '', [categoryName])
+    );
+  }
+
+  // AI operations
+  async generateAiRecommendations(
+    userId: number | null,
+    preferredCategories?: string[],
+    minPrice?: number,
+    maxPrice?: number,
+    useRandomMode?: boolean
+  ): Promise<any[]> {
+    return this.executeWithFallback(
+      'generateAiRecommendations',
+      () => this.primaryStorage.generateAiRecommendations(userId, preferredCategories, minPrice, maxPrice, useRandomMode),
+      () => this.fallbackStorage.generateAiRecommendations(userId, preferredCategories, minPrice, maxPrice, useRandomMode)
+    );
+  }
+
+  async getAiRecommendations(userId: number | null): Promise<any[]> {
+    return this.executeWithFallback(
+      'getAiRecommendations',
+      () => this.primaryStorage.getAiRecommendations(userId),
+      () => this.fallbackStorage.getAiRecommendations(userId)
+    );
+  }
+
+  // User history operations
+  async addUserPurchaseHistory(
+    userId: number,
+    productId: number,
+    categoryId: number | null,
+    price: number,
+    quantity?: number
+  ): Promise<any> {
+    return this.executeWithFallback(
+      'addUserPurchaseHistory',
+      () => this.primaryStorage.addUserPurchaseHistory(userId, productId, categoryId, price, quantity),
+      () => this.fallbackStorage.addUserPurchaseHistory(userId, productId, categoryId, price, quantity)
+    );
+  }
+
+  async getUserPurchaseHistory(userId: number, limit?: number): Promise<any[]> {
+    return this.executeWithFallback(
+      'getUserPurchaseHistory',
+      () => this.primaryStorage.getUserPurchaseHistory(userId, limit),
+      () => this.fallbackStorage.getUserPurchaseHistory(userId, limit)
+    );
+  }
+
+  async addUserSearchHistory(
+    userId: number,
+    searchQuery: string,
+    categoryId?: number | null,
+    clickedProductId?: number | null
+  ): Promise<any> {
+    return this.executeWithFallback(
+      'addUserSearchHistory',
+      () => this.primaryStorage.addUserSearchHistory(userId, searchQuery, categoryId, clickedProductId),
+      () => this.fallbackStorage.addUserSearchHistory(userId, searchQuery, categoryId, clickedProductId)
+    );
+  }
+
+  async getUserSearchHistory(userId: number, limit?: number): Promise<any[]> {
+    return this.executeWithFallback(
+      'getUserSearchHistory',
+      () => this.primaryStorage.getUserSearchHistory(userId, limit),
+      () => this.fallbackStorage.getUserSearchHistory(userId, limit)
+    );
+  }
+
+  async getUserProductPreferences(userId: number): Promise<any[]> {
+    return this.executeWithFallback(
+      'getUserProductPreferences',
+      () => this.primaryStorage.getUserProductPreferences(userId),
+      () => this.fallbackStorage.getUserProductPreferences(userId)
+    );
+  }
+
+  async updateUserProductPreference(userId: number, categoryId: number, preferenceScore: number): Promise<any> {
+    return this.executeWithFallback(
+      'updateUserProductPreference',
+      () => this.primaryStorage.updateUserProductPreference(userId, categoryId, preferenceScore),
+      () => this.fallbackStorage.updateUserProductPreference(userId, categoryId, preferenceScore)
     );
   }
 
@@ -3478,6 +3988,114 @@ export class HybridStorage implements IStorage {
       'getUserSubscriptionDetails',
       () => this.primaryStorage.getUserSubscriptionDetails(userId),
       () => this.fallbackStorage.getUserSubscriptionDetails(userId)
+    );
+  }
+
+  // DasWos Coins operations
+  async getUserDasWosCoins(userId: number): Promise<number> {
+    return this.executeWithFallback(
+      'getUserDasWosCoins',
+      () => this.primaryStorage.getUserDasWosCoins(userId),
+      () => this.fallbackStorage.getUserDasWosCoins ? this.fallbackStorage.getUserDasWosCoins(userId) : 0
+    );
+  }
+
+  async addDasWosCoins(userId: number, amount: number, type: string, description: string, metadata?: any): Promise<boolean> {
+    return this.executeWithFallback(
+      'addDasWosCoins',
+      () => this.primaryStorage.addDasWosCoins(userId, amount, type, description, metadata),
+      () => this.fallbackStorage.addDasWosCoins ? this.fallbackStorage.addDasWosCoins(userId, amount, type, description, metadata) : true
+    );
+  }
+
+  async spendDasWosCoins(userId: number, amount: number, description: string, metadata?: any): Promise<boolean> {
+    return this.executeWithFallback(
+      'spendDasWosCoins',
+      () => this.primaryStorage.spendDasWosCoins(userId, amount, description, metadata),
+      () => this.fallbackStorage.spendDasWosCoins ? this.fallbackStorage.spendDasWosCoins(userId, amount, description, metadata) : true
+    );
+  }
+
+  async getDasWosCoinsTransactions(userId: number, limit?: number): Promise<any[]> {
+    return this.executeWithFallback(
+      'getDasWosCoinsTransactions',
+      () => this.primaryStorage.getDasWosCoinsTransactions(userId, limit),
+      () => this.fallbackStorage.getDasWosCoinsTransactions ? this.fallbackStorage.getDasWosCoinsTransactions(userId, limit) : []
+    );
+  }
+
+  // Cart operations
+  async getUserCartItems(userId: number): Promise<any[]> {
+    return this.executeWithFallback(
+      'getUserCartItems',
+      () => this.primaryStorage.getUserCartItems(userId),
+      () => this.fallbackStorage.getUserCartItems ? this.fallbackStorage.getUserCartItems(userId) : []
+    );
+  }
+
+  async addCartItem(cartItem: any): Promise<any> {
+    return this.executeWithFallback(
+      'addCartItem',
+      () => this.primaryStorage.addCartItem(cartItem),
+      () => this.fallbackStorage.addCartItem ? this.fallbackStorage.addCartItem(cartItem) : { id: Date.now(), ...cartItem }
+    );
+  }
+
+  async updateCartItemQuantity(itemId: number, quantity: number): Promise<any> {
+    return this.executeWithFallback(
+      'updateCartItemQuantity',
+      () => this.primaryStorage.updateCartItemQuantity(itemId, quantity),
+      () => this.fallbackStorage.updateCartItemQuantity ? this.fallbackStorage.updateCartItemQuantity(itemId, quantity) : { id: itemId, quantity }
+    );
+  }
+
+  async removeCartItem(itemId: number): Promise<boolean> {
+    return this.executeWithFallback(
+      'removeCartItem',
+      () => this.primaryStorage.removeCartItem(itemId),
+      () => this.fallbackStorage.removeCartItem ? this.fallbackStorage.removeCartItem(itemId) : true
+    );
+  }
+
+  async clearUserCart(userId: number): Promise<boolean> {
+    return this.executeWithFallback(
+      'clearUserCart',
+      () => this.primaryStorage.clearUserCart(userId),
+      () => this.fallbackStorage.clearUserCart ? this.fallbackStorage.clearUserCart(userId) : true
+    );
+  }
+
+  // SafeSphere operations
+  async getSafeSphereStatus(userId: number): Promise<{ active: boolean }> {
+    return this.executeWithFallback(
+      'getSafeSphereStatus',
+      () => this.primaryStorage.getSafeSphereStatus(userId),
+      () => this.fallbackStorage.getSafeSphereStatus ? this.fallbackStorage.getSafeSphereStatus(userId) : { active: false }
+    );
+  }
+
+  async updateSafeSphereStatus(userId: number, active: boolean): Promise<boolean> {
+    return this.executeWithFallback(
+      'updateSafeSphereStatus',
+      () => this.primaryStorage.updateSafeSphereStatus(userId, active),
+      () => this.fallbackStorage.updateSafeSphereStatus ? this.fallbackStorage.updateSafeSphereStatus(userId, active) : true
+    );
+  }
+
+  // Dasbar preferences operations
+  async getUserDasbarPreferences(userId: number): Promise<any> {
+    return this.executeWithFallback(
+      'getUserDasbarPreferences',
+      () => this.primaryStorage.getUserDasbarPreferences(userId),
+      () => this.fallbackStorage.getUserDasbarPreferences ? this.fallbackStorage.getUserDasbarPreferences(userId) : null
+    );
+  }
+
+  async saveUserDasbarPreferences(userId: number, items: any[]): Promise<any> {
+    return this.executeWithFallback(
+      'saveUserDasbarPreferences',
+      () => this.primaryStorage.saveUserDasbarPreferences(userId, items),
+      () => this.fallbackStorage.saveUserDasbarPreferences ? this.fallbackStorage.saveUserDasbarPreferences(userId, items) : { userId, items }
     );
   }
 

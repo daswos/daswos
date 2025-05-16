@@ -18,9 +18,12 @@ import { WorkspaceProvider } from "@/components/workspace/workspace-context";
 import Workspace from "@/components/workspace/workspace";
 import { ThemeProvider } from "@/providers/theme-provider";
 import { Loader2 } from "lucide-react";
+import GlobalAutoShopTimer from "@/components/global-autoshop-timer";
+import PageManager from "@/components/page-manager";
 
-// Lazy load the UserSettings page
+// Lazy load pages
 const UserSettings = lazy(() => import('@/pages/user-settings'));
+const AutoShopDashboard = lazy(() => import('@/pages/autoshop-dashboard'));
 
 // Import our custom hook
 import { useBackspaceNavigation } from '@/hooks/use-backspace-navigation';
@@ -29,45 +32,16 @@ function Router() {
   // Use the backspace navigation hook
   useBackspaceNavigation();
 
-  return (
-    <div className="flex flex-col min-h-screen">
-      <Switch>
-        <Route path="/">
-          <Header />
-          <main className="flex-grow bg-[#E0E0E0] pb-24">
-            <Home />
-          </main>
-          <NavigationBar />
-          <Workspace />
-        </Route>
+  // The PageManager component will handle tracking page views
 
-        <Route>
-          <Header />
-          <main className="flex-grow bg-[#E0E0E0] pb-24">
-            <Switch>
-              {/* Only keep the unified search route */}
-              <Route path="/search" component={UnifiedSearch} />
-              <Route path="/unified-search" component={UnifiedSearch} />
-              {/* Add auth page route */}
-              <Route path="/auth" component={AuthPage} />
-              {/* Add user settings route */}
-              <Route path="/user-settings">
-                <Suspense fallback={
-                  <div className="flex items-center justify-center h-full w-full py-12">
-                    <Loader2 className="h-8 w-8 animate-spin text-gray-500" />
-                    <span className="ml-2 text-gray-500">Loading settings...</span>
-                  </div>
-                }>
-                  <UserSettings />
-                </Suspense>
-              </Route>
-              <Route component={NotFound} />
-            </Switch>
-          </main>
-          <NavigationBar />
-          <Workspace />
-        </Route>
-      </Switch>
+  return (
+    <div className="flex flex-col min-h-screen bg-[#E0E0E0] dark:bg-[#222222]">
+      <Header />
+      <main className="flex-grow bg-[#E0E0E0] dark:bg-[#222222]">
+        <PageManager />
+      </main>
+      <NavigationBar />
+      <Workspace />
     </div>
   );
 }
@@ -83,6 +57,7 @@ function App() {
                 <DasbarProvider>
                   <WorkspaceProvider>
                     <Router />
+                    <GlobalAutoShopTimer />
                     <Toaster />
                   </WorkspaceProvider>
                 </DasbarProvider>

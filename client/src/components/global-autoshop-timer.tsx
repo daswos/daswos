@@ -4,13 +4,17 @@ import { Progress } from '@/components/ui/progress';
 import { useAutoShop } from '@/contexts/autoshop-context';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
+import { useQuery } from '@tanstack/react-query';
+import { apiRequest } from '@/lib/queryClient';
+import { useAuth } from '@/hooks/use-auth';
+import { useSafeSphereContext } from '@/contexts/safe-sphere-context';
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
 
-// Mock data for selected items
+// Item interface
 interface SelectedItem {
   id: string;
   name: string;
@@ -19,8 +23,10 @@ interface SelectedItem {
 }
 
 const GlobalAutoShopTimer: React.FC = () => {
-  const { isAutoShopEnabled, endTime, disableAutoShop } = useAutoShop();
+  const { isAutoShopEnabled, endTime, disableAutoShop, setTotalItems } = useAutoShop();
   const { toast } = useToast();
+  const { user } = useAuth();
+  const { isSafeSphere } = useSafeSphereContext();
 
   const [timeLeft, setTimeLeft] = useState<{
     days: number;
@@ -41,13 +47,33 @@ const GlobalAutoShopTimer: React.FC = () => {
   const [initialTotalSeconds, setInitialTotalSeconds] = useState<number>(0);
   const [isVisible, setIsVisible] = useState(true);
   const [isOpen, setIsOpen] = useState(false);
+  const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([]);
 
-  // Mock selected items - in a real app, this would come from the API or context
-  const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([
-    { id: '1', name: 'Wireless Earbuds', price: 89 },
-    { id: '2', name: 'Smart Watch', price: 199 },
-    { id: '3', name: 'Portable Charger', price: 49 },
-  ]);
+  // Fetch recommendations from the API
+  const { data: recommendations = [], refetch: refetchRecommendations } = useQuery({
+    queryKey: ["/api/ai-shopper/recommendations"],
+    queryFn: async () => {
+      return apiRequest<any[]>("/api/ai-shopper/recommendations", { method: 'GET' });
+    },
+    enabled: !!user && isAutoShopEnabled,
+    refetchInterval: 30000, // Refetch every 30 seconds
+    onSuccess: (data) => {
+      // Convert API recommendations to selected items format
+      const items = data
+        .filter(rec => rec.status === 'pending' || rec.status === 'added_to_cart')
+        .map(rec => ({
+          id: rec.id.toString(),
+          name: rec.product?.title || 'Unknown Product',
+          price: rec.product?.price ? Math.floor(rec.product.price / 100) : 0, // Convert cents to dollars
+          image: rec.product?.image_url
+        }));
+
+      setSelectedItems(items);
+
+      // Update total items count in the AutoShop context
+      setTotalItems(items.length);
+    }
+  });
 
   // Calculate time left and update state
   useEffect(() => {
@@ -136,43 +162,133 @@ const GlobalAutoShopTimer: React.FC = () => {
   };
 
   // Handle stop button click
-  const handleStopClick = () => {
-    // Clear the selected items when stopping
-    setSelectedItems([]);
-    disableAutoShop();
-    // Removed toast notification for stopping
+  const handleStopClick = async () => {
+    try {
+      // Clear recommendations from the API
+      await apiRequest("/api/ai-shopper/recommendations/clear", { method: "POST" });
+
+      // Clear the selected items locally
+      setSelectedItems([]);
+
+      // Disable AutoShop
+      disableAutoShop();
+
+      toast({
+        title: "AutoShop Stopped",
+        description: "AutoShop has been stopped and all items have been cleared.",
+      });
+    } catch (error) {
+      console.error("Failed to clear recommendations:", error);
+
+      // Still disable AutoShop even if clearing recommendations fails
+      disableAutoShop();
+
+      toast({
+        title: "AutoShop Stopped",
+        description: "AutoShop has been stopped, but there was an error clearing items.",
+        variant: "destructive"
+      });
+    }
   };
 
-  // Simulate AI finding new items (for demonstration purposes)
+  // Refresh recommendations when AutoShop is enabled
+  useEffect(() => {
+    if (isAutoShopEnabled && endTime && user) {
+      // Initial fetch
+      refetchRecommendations();
+    }
+  }, [isAutoShopEnabled, endTime, user, refetchRecommendations]);
+
+  // Automatically select items based on itemsPerMinute setting
   useEffect(() => {
     if (isAutoShopEnabled && endTime) {
-      // Simulate AI finding new items every 20-30 seconds
-      const mockItems = [
-        { id: '4', name: 'Bluetooth Speaker', price: 79 },
-        { id: '5', name: 'Fitness Tracker', price: 129 },
-        { id: '6', name: 'Wireless Mouse', price: 39 },
-        { id: '7', name: 'USB-C Hub', price: 59 },
-        { id: '8', name: 'Phone Stand', price: 19 },
-      ];
+      // Get settings from localStorage
+      const savedSettings = localStorage.getItem('daswos-autoshop-settings');
+      if (!savedSettings) return;
 
-      let currentIndex = 0;
+      try {
+        const settings = JSON.parse(savedSettings);
 
-      const addItemInterval = setInterval(() => {
-        if (currentIndex < mockItems.length) {
-          const newItem = mockItems[currentIndex];
-          setSelectedItems(prev => [...prev, newItem]);
+        // Only set up interval if itemsPerMinute is greater than 0
+        if (settings.itemsPerMinute > 0) {
+          console.log(`Setting up auto-selection interval: ${settings.itemsPerMinute} items per minute`);
 
-          // Removed toast notification for new items
+          // Calculate interval in milliseconds (convert items per minute to milliseconds between items)
+          const intervalMs = 60000 / settings.itemsPerMinute;
 
-          currentIndex++;
-        } else {
-          clearInterval(addItemInterval);
+          // Function to generate a new recommendation
+          const generateRecommendation = async () => {
+            try {
+              // Call the AI shopper API to generate a recommendation
+              const response = await fetch('/api/ai-shopper/generate', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                  categories: settings.categories || [],
+                  minPrice: settings.minItemPrice || 0,
+                  maxPrice: settings.maxItemPrice || 100000,
+                  useRandomMode: settings.useRandomMode || false,
+                  useSafeSphere: isSafeSphere
+                  // Note: minPrice and maxPrice are in cents, where 100 cents = $1
+                  // DasWos Coins are in dollars, where 1 coin = $1
+                })
+              });
+
+              if (!response.ok) {
+                throw new Error('Failed to generate recommendation');
+              }
+
+              const recommendations = await response.json();
+
+              if (recommendations && recommendations.length > 0) {
+                // Get the first recommendation
+                const recommendation = recommendations[0];
+
+                // Add the recommendation to the cart
+                if (recommendation.product) {
+                  try {
+                    await fetch(`/api/ai-shopper/recommendations/${recommendation.id}/add-to-cart`, {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json'
+                      }
+                    });
+
+                    console.log(`Added item ${recommendation.product.title} to cart`);
+
+                    // Refresh recommendations to show the new item
+                    refetchRecommendations();
+
+                    // Show toast notification
+                    toast({
+                      title: "New Item Added",
+                      description: `AutoShop found: ${recommendation.product.title}`,
+                    });
+                  } catch (cartError) {
+                    console.error('Error adding item to cart:', cartError);
+                  }
+                }
+              }
+            } catch (error) {
+              console.error('Error generating recommendation:', error);
+            }
+          };
+
+          // Set up interval to generate recommendations
+          const addItemInterval = setInterval(generateRecommendation, intervalMs);
+
+          // Generate the first recommendation immediately
+          generateRecommendation();
+
+          return () => clearInterval(addItemInterval);
         }
-      }, Math.random() * 5000 + 10000); // Random interval between 10-15 seconds (for demo purposes)
-
-      return () => clearInterval(addItemInterval);
+      } catch (error) {
+        console.error('Error parsing AutoShop settings:', error);
+      }
     }
-  }, [isAutoShopEnabled, endTime, toast]);
+  }, [isAutoShopEnabled, endTime, toast, refetchRecommendations, isSafeSphere]);
 
   // Don't render anything if AutoShop is not enabled
   if (!isAutoShopEnabled || !endTime) {
@@ -183,13 +299,13 @@ const GlobalAutoShopTimer: React.FC = () => {
     <div className={`fixed top-16 right-4 z-50 transition-all duration-300 ${isVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
       <Popover open={isOpen} onOpenChange={setIsOpen}>
         <PopoverTrigger asChild>
-          <div className="bg-gray-100 dark:bg-gray-800 rounded-full shadow-md cursor-pointer flex items-center gap-2 p-1.5">
-            <div className="relative flex items-center">
+          <div className="bg-white dark:bg-gray-800 rounded-full shadow-md cursor-pointer flex items-center gap-2 p-2 pr-3">
+            <div className="flex items-center gap-1.5">
               <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></div>
-              <span className="ml-1.5 text-xs font-medium">AutoShop</span>
+              <span className="text-sm font-medium">AutoShop</span>
             </div>
-            <span className="text-xs font-mono">{formatCountdown()}</span>
-            <div className="flex items-center gap-1">
+            <span className="text-sm font-mono ml-1">{formatCountdown()}</span>
+            <div className="flex items-center gap-1 ml-1">
               <Button
                 variant="ghost"
                 size="icon"
@@ -219,36 +335,57 @@ const GlobalAutoShopTimer: React.FC = () => {
             </div>
           </div>
         </PopoverTrigger>
-        <PopoverContent className="w-64 p-2" align="end">
-          <div className="space-y-2">
-            <div className="flex items-center justify-between border-b pb-1">
-              <h4 className="text-sm font-medium">Selected Items</h4>
-              <span className="text-xs text-muted-foreground">{selectedItems.length} items</span>
+        <PopoverContent className="w-80 p-0 border rounded-md shadow-lg" align="end">
+          <div>
+            <div className="flex items-center justify-between p-4 pb-3">
+              <h4 className="text-lg font-medium">Selected Items</h4>
+              <span className="text-sm text-gray-500">{selectedItems.length} items</span>
             </div>
 
             {selectedItems.length > 0 ? (
-              <div className="max-h-60 overflow-y-auto space-y-2">
+              <div className="max-h-60 overflow-y-auto">
                 {selectedItems.map(item => (
-                  <div key={item.id} className="flex items-center justify-between py-1 border-b border-dashed border-gray-200 dark:border-gray-700 last:border-0">
-                    <div className="flex items-center gap-2">
-                      <div className="h-6 w-6 bg-gray-200 dark:bg-gray-700 rounded-md flex items-center justify-center">
-                        <Package className="h-3 w-3 text-gray-500" />
+                  <div key={item.id} className="flex items-center justify-between py-3 px-4 border-b border-gray-100 hover:bg-gray-50">
+                    <div className="flex items-center gap-3">
+                      <div className="w-6 h-6 bg-gray-100 rounded-md flex items-center justify-center">
+                        <Package className="h-3.5 w-3.5 text-gray-500" />
                       </div>
-                      <span className="text-xs truncate max-w-[120px]">{item.name}</span>
+                      <span className="text-sm">{item.name}</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-medium">${item.price}</span>
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-medium">${item.price} (${Math.ceil(item.price / 100)} coins)</span>
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-5 w-5 rounded-full hover:bg-red-100 dark:hover:bg-red-900/30 p-0 ml-1"
-                        onClick={() => {
-                          setSelectedItems(items => items.filter(i => i.id !== item.id));
-                          // Removed toast notification
+                        className="h-5 w-5 rounded-full hover:bg-red-100 p-0"
+                        onClick={async () => {
+                          try {
+                            // Update the recommendation status in the API
+                            await apiRequest(`/api/ai-shopper/recommendations/${item.id}`, {
+                              method: 'PUT',
+                              body: JSON.stringify({
+                                status: 'rejected',
+                                reason: 'User removed from AutoShop'
+                              })
+                            });
+
+                            // Remove from local state
+                            setSelectedItems(items => items.filter(i => i.id !== item.id));
+
+                            // Update total items count
+                            setTotalItems(prev => Math.max(0, prev - 1));
+                          } catch (error) {
+                            console.error("Failed to remove item:", error);
+                            toast({
+                              title: "Error",
+                              description: "Failed to remove item. Please try again.",
+                              variant: "destructive"
+                            });
+                          }
                         }}
                         title="Remove item"
                       >
-                        <X className="h-3 w-3 text-red-500" />
+                        <X className="h-3.5 w-3.5 text-red-500" />
                       </Button>
                     </div>
                   </div>
@@ -260,16 +397,21 @@ const GlobalAutoShopTimer: React.FC = () => {
               </div>
             )}
 
-            <div className="pt-1 border-t flex justify-between items-center">
-              <span className="text-xs font-medium">Total:</span>
-              <span className="text-sm font-medium">
-                ${selectedItems.reduce((sum, item) => sum + item.price, 0)}
-              </span>
-            </div>
+            <div className="border-t border-gray-200">
+              <div className="flex justify-between items-center p-4">
+                <span className="text-sm font-medium">Total:</span>
+                <span className="text-xl font-bold">
+                  ${selectedItems.reduce((sum, item) => sum + item.price, 0)}
+                  <span className="text-sm font-normal ml-1">
+                    ({selectedItems.reduce((sum, item) => sum + Math.ceil(item.price / 100), 0)} coins)
+                  </span>
+                </span>
+              </div>
 
-            <p className="text-xs text-muted-foreground mt-1">
-              Items will be finalized when the timer ends
-            </p>
+              <p className="text-xs text-gray-500 px-4 pb-4">
+                Items will be finalized when the timer ends
+              </p>
+            </div>
           </div>
         </PopoverContent>
       </Popover>

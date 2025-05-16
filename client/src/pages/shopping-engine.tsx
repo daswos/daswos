@@ -5,6 +5,7 @@ import { Search, ShoppingBag, Loader2, Check, X, Info, ShoppingCart, Sun, Moon }
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import ProductTile from '@/components/product-tile';
+import CarouselSearchResults from '@/components/carousel-search-results';
 import '@/styles/product-tile.css';
 import SphereToggle from '@/components/sphere-toggle';
 import { useAuth } from '@/hooks/use-auth';
@@ -244,10 +245,15 @@ const ShoppingEngine: React.FC = () => {
                 </div>
               ) : searchResults.length > 0 ? (
                 <div>
-                  <h2 className="text-xl font-semibold mb-6 text-black dark:text-white">
-                    Results for "{submittedQuery}"
+                  <h2 className="text-xl font-semibold mb-6 text-center text-black dark:text-white">
+                    RESULTS
                   </h2>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mx-auto">
+                  <div className="mb-8">
+                    <CarouselSearchResults products={searchResults} />
+                  </div>
+
+                  {/* Traditional grid view as fallback */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mx-auto mt-8 hidden">
                     {searchResults.map((product: any) => (
                       <ProductTile
                         key={product.id}

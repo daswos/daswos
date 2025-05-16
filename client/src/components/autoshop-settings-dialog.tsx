@@ -55,7 +55,8 @@ const DEFAULT_SETTINGS: AutoShopSettings = {
   },
   categories: [],
   customPrompt: '',
-  useRandomMode: false
+  useRandomMode: true, // Default to random mode to avoid category issues
+  itemsPerMinute: 1 // Default to 1 item per minute
 };
 
 // Available shopping categories
@@ -84,7 +85,7 @@ const AutoShopSettingsDialog: React.FC<AutoShopSettingsDialogProps> = ({
     DEFAULT_SETTINGS.minItemPrice,
     DEFAULT_SETTINGS.maxItemPrice
   ]);
-  const [selectionMode, setSelectionMode] = useState<'categories' | 'prompt' | 'random'>('categories');
+  const [selectionMode, setSelectionMode] = useState<'categories' | 'prompt' | 'random'>('random');
   const [errors, setErrors] = useState<{[key: string]: string}>({});
 
   // Reset settings when dialog opens
@@ -275,7 +276,7 @@ const AutoShopSettingsDialog: React.FC<AutoShopSettingsDialogProps> = ({
                   <p className="text-destructive text-sm">{errors.priceRange}</p>
                 )}
                 <p className="text-sm text-muted-foreground">
-                  The AI will only consider items within this price range.
+                  The AI will only consider items within this price range. Prices are in dollars, and 1 DasWos Coin = $1.
                 </p>
               </div>
             </div>
@@ -324,6 +325,26 @@ const AutoShopSettingsDialog: React.FC<AutoShopSettingsDialogProps> = ({
                 )}
                 <p className="text-sm text-muted-foreground mt-1">
                   The AI will shop for this duration before automatically stopping.
+                </p>
+              </div>
+
+              <div>
+                <Label className="text-base font-medium">Items per minute</Label>
+                <div className="flex items-center gap-2 mt-1.5">
+                  <Input
+                    type="number"
+                    value={settings.itemsPerMinute}
+                    min={0}
+                    max={10}
+                    onChange={(e) => setSettings(prev => ({
+                      ...prev,
+                      itemsPerMinute: parseInt(e.target.value) || 0
+                    }))}
+                    className="w-24"
+                  />
+                </div>
+                <p className="text-sm text-muted-foreground mt-1">
+                  The AI will select this many items per minute. Set to 0 to disable automatic selection.
                 </p>
               </div>
 

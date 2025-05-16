@@ -11,9 +11,12 @@ import FeatureAwareAiSearchToggle from '@/components/feature-aware-ai-search-tog
 import FeatureAwareSuperSafeToggle from '@/components/feature-aware-super-safe-toggle';
 import RobotIcon from '@/components/robot-icon';
 import CategoryShoppingDialog from '@/components/category-shopping-dialog';
+import SearchIntentPrompt from '@/components/search-intent-prompt';
+import ShoppingResults from '@/components/shopping-results';
+import InformationResults from '@/components/information-results';
 import PhotoSelector from '@/components/photo-selector';
 import ResizableImage from '@/components/resizable-image';
-import MovableSearchInterface from '@/components/movable-search-interface';
+import SearchInterface from '@/components/search-interface';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 
@@ -95,7 +98,11 @@ const Home: React.FC = () => {
   const [searchType, setSearchType] = useState<'shopping' | 'information'>('information');
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Listen for AI mode toggle events
+  // State for search results
+  const [showResults, setShowResults] = useState(false);
+  const [selectedResultType, setSelectedResultType] = useState<'shopping' | 'information' | null>(null);
+
+  // Listen for AI mode toggle events and search interface reset
   useEffect(() => {
     // Load initial state from localStorage
     const storedValue = localStorage.getItem('daswos-ai-mode-enabled');
@@ -107,12 +114,26 @@ const Home: React.FC = () => {
       setAiModeEnabled(event.detail.enabled);
     };
 
-    // Add event listener
-    window.addEventListener('aiModeChanged', handleAiModeChange as EventListener);
+    const handleResetSearchInterface = (event: CustomEvent) => {
+      // Reset all search-related state
+      setIsAiConversationActive(false);
+      setIsAskingIfShopping(false);
+      setConversationHistory([]);
+      setCurrentQuery('');
+      setAiResponse(null);
+      setShowResults(false);
+      setSelectedResultType(null);
+      setSearchPlaceholder('');
+    };
 
-    // Cleanup function to remove event listener
+    // Add event listeners
+    window.addEventListener('aiModeChanged', handleAiModeChange as EventListener);
+    window.addEventListener('resetSearchInterface', handleResetSearchInterface as EventListener);
+
+    // Cleanup function to remove event listeners
     return () => {
       window.removeEventListener('aiModeChanged', handleAiModeChange as EventListener);
+      window.removeEventListener('resetSearchInterface', handleResetSearchInterface as EventListener);
     };
   }, []);
 
@@ -252,11 +273,15 @@ const Home: React.FC = () => {
 
   // Handle yes/no response to "Are you shopping?" question
   const handleShoppingResponse = (isShopping: boolean) => {
+    // Determine which result type to show based on the response
+    const newResultType = isShopping ? 'shopping' : 'information';
+    setSelectedResultType(newResultType);
+    setShowResults(true);
+
     // If AI mode is enabled, continue the conversation
     if (aiModeEnabled) {
       // Determine which engine to use based on the response
-      const newSearchType = isShopping ? 'shopping' : 'information';
-      setSearchType(newSearchType);
+      setSearchType(newResultType);
 
       // Add user's response to conversation history
       setConversationHistory(prev => [
@@ -269,8 +294,8 @@ const Home: React.FC = () => {
 
       // Create a response based on the user's choice
       const responseText = isShopping
-        ? `I'll help you shop for "${currentQuery}". What are you looking for specifically?`
-        : `I'll help you find information about "${currentQuery}". What would you like to know?`;
+        ? `I'll help you shop for "${currentQuery}". Here are some products you might like.`
+        : `I'll help you find information about "${currentQuery}". Here's what I found.`;
 
       // Add AI's response to conversation history
       setConversationHistory(prev => [
@@ -300,18 +325,8 @@ const Home: React.FC = () => {
         searchInputRef.current.focus();
       }
     } else {
-      // If AI mode is not enabled, redirect to the appropriate engine page
-      if (isShopping) {
-        // Redirect to shopping engine
-        setLocation(`/shopping-engine?q=${encodeURIComponent(currentQuery)}&sphere=${activeSphere}`);
-      } else {
-        // Redirect to search engine
-        setLocation(`/search-engine?q=${encodeURIComponent(currentQuery)}&sphere=${activeSphere}`);
-      }
-
-      // Reset state
+      // Hide the yes/no buttons but show results on the same page
       setIsAskingIfShopping(false);
-      setCurrentQuery('');
     }
   };
 
@@ -437,7 +452,7 @@ const Home: React.FC = () => {
     <div className="min-h-screen flex flex-col">
       {/* Design with proper dark mode support */}
       <div
-        className="relative bg-[#E0E0E0] dark:bg-[#222222] pt-12 pb-8 flex-grow flex items-center justify-center"
+        className="relative bg-[#E0E0E0] dark:bg-[#222222] pt-0 pb-8 flex-grow flex flex-col items-center justify-center"
       >
         {/* Background photo */}
         {backgroundPhoto && (
@@ -459,57 +474,70 @@ const Home: React.FC = () => {
           />
         )}
 
-        {/* Movable Search Interface */}
-        <MovableSearchInterface
-          onSearch={handleInitialSearch}
-          aiModeEnabled={aiModeEnabled}
-          onToggleAi={(enabled) => setAiModeEnabled(enabled)}
-          activeSphere={activeSphere}
-          onSphereChange={handleSphereChange}
-          superSafeActive={superSafeActive}
-          onToggleSuperSafe={(active) => setSuperSafeActive(active)}
-        />
+        {/* Search Interface */}
+        <div className="w-full flex justify-center items-start flex-grow" style={{ paddingTop: '5vh' }}>
+          <SearchInterface
+            onSearch={handleInitialSearch}
+            aiModeEnabled={aiModeEnabled}
+            onToggleAi={(enabled) => setAiModeEnabled(enabled)}
+            activeSphere={activeSphere}
+            onSphereChange={handleSphereChange}
+            superSafeActive={superSafeActive}
+            onToggleSuperSafe={(active) => setSuperSafeActive(active)}
+            showResults={showResults}
+            selectedResultType={selectedResultType}
+            searchQuery={currentQuery}
+          />
+        </div>
 
         <div className="container mx-auto px-4 max-w-6xl">
-          <div className="flex flex-col md:flex-row items-start justify-start gap-6 md:gap-8">
-            {/* Empty div to maintain layout */}
-            <div className="w-full md:w-1/4 md:mt-0 pt-2">
-            </div>
-
-            {/* Content area for AI conversation */}
-            <div className="w-full md:w-1/2 flex flex-col items-start justify-start">
+          <div className="flex flex-col items-center justify-center w-full">
+            {/* Content area for AI conversation and search results */}
+            <div className="w-full flex flex-col items-center justify-center">
 
               {/* AI Conversation Area */}
-              <div className="w-full max-w-xl mb-4">
+              <div className="w-full max-w-2xl mb-4 relative">
                 {isAskingIfShopping ? (
-                  <CategoryShoppingDialog
-                    query={currentQuery}
-                    onYes={() => handleShoppingResponse(true)}
-                    onNo={() => handleShoppingResponse(false)}
-                    onCancel={() => {
-                      // Reset conversation state
-                      setIsAiConversationActive(false);
-                      setIsAskingIfShopping(false);
-                      setConversationHistory([]);
-                      setCurrentQuery('');
-                      setAiResponse(null);
-                      // Focus the search input
-                      if (searchInputRef.current) {
-                        searchInputRef.current.focus();
-                      }
-                    }}
-                  />
+                  <>
+                    {/* Semi-transparent backdrop */}
+                    <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40"></div>
+                    <div className="fixed top-[260px] left-1/2 transform -translate-x-1/2 z-50 w-full max-w-md">
+                      <SearchIntentPrompt
+                      searchQuery={currentQuery}
+                      onSelectShopping={() => handleShoppingResponse(true)}
+                      onSelectInformation={() => handleShoppingResponse(false)}
+                      onCancel={() => {
+                        // Reset conversation state
+                        setIsAiConversationActive(false);
+                        setIsAskingIfShopping(false);
+                        setConversationHistory([]);
+                        setCurrentQuery('');
+                        setAiResponse(null);
+                        setShowResults(false);
+                        setSelectedResultType(null);
+                        // Focus the search input
+                        if (searchInputRef.current) {
+                          searchInputRef.current.focus();
+                        }
+                      }}
+                    />
+                  </div>
+                  </>
                 ) : (
-                  <div className="flex flex-col space-y-2">
+                  <div className="flex flex-col space-y-2 items-center w-full">
 
                     {/* Control buttons for AI conversation */}
                     {aiModeEnabled && isAiConversationActive && !isAskingIfShopping && (
-                      <div className="flex justify-between items-center mt-2 p-2 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                      <div className="flex justify-between items-center mt-2 p-2 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 w-full max-w-xl">
                         <div className="flex items-center space-x-3">
                           {/* Mode toggle */}
                           <button
                             type="button"
-                            onClick={() => setSearchType(searchType === 'shopping' ? 'information' : 'shopping')}
+                            onClick={() => {
+                              const newType = searchType === 'shopping' ? 'information' : 'shopping';
+                              setSearchType(newType);
+                              setSelectedResultType(newType);
+                            }}
                             className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 flex items-center text-xs"
                             title={`Switch to ${searchType === 'shopping' ? 'information' : 'shopping'} mode`}
                           >
@@ -527,6 +555,8 @@ const Home: React.FC = () => {
                               setCurrentQuery('');
                               setAiResponse(null);
                               setSearchPlaceholder('');
+                              setShowResults(false);
+                              setSelectedResultType(null);
                             }}
                             className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 flex items-center text-xs"
                           >
@@ -552,6 +582,8 @@ const Home: React.FC = () => {
                   </div>
                 )}
               </div>
+
+              {/* Search Results are now handled in the MovableSearchInterface */}
 
               {/* Removed feature toggles as they're now in the movable search interface */}
             </div>

@@ -23,7 +23,7 @@ export class FallbackStorage implements IStorage {
 
     // Initialize with some sample data
     this.initializeSampleData();
-    
+
     log('FallbackStorage initialized with sample data', 'info');
   }
 
@@ -130,7 +130,7 @@ export class FallbackStorage implements IStorage {
 
   // Product operations
   async getProducts(sphere: string, query?: string) {
-    let filteredProducts = this.products.filter(product => 
+    let filteredProducts = this.products.filter(product =>
       product.sphere === sphere || sphere === 'all'
     );
 
@@ -190,38 +190,114 @@ export class FallbackStorage implements IStorage {
   async updateUserSubscription(userId: number, subscriptionType: string, durationMonths: number) {
     const user = await this.getUser(userId);
     if (!user) throw new Error('User not found');
-    
+
     const expiresAt = new Date();
     expiresAt.setMonth(expiresAt.getMonth() + durationMonths);
-    
+
     user.hasSubscription = true;
     user.subscriptionType = subscriptionType;
     user.subscriptionExpiresAt = expiresAt;
     user.updatedAt = new Date();
-    
+
     return user;
   }
 
   async checkUserHasSubscription(userId: number) {
     const user = await this.getUser(userId);
     if (!user) return false;
-    
-    return user.hasSubscription && 
-           user.subscriptionExpiresAt && 
+
+    return user.hasSubscription &&
+           user.subscriptionExpiresAt &&
            new Date() < user.subscriptionExpiresAt;
   }
 
   async getUserSubscriptionDetails(userId: number) {
     const user = await this.getUser(userId);
     if (!user) return { hasSubscription: false };
-    
+
     return {
-      hasSubscription: user.hasSubscription && 
-                      user.subscriptionExpiresAt && 
+      hasSubscription: user.hasSubscription &&
+                      user.subscriptionExpiresAt &&
                       new Date() < user.subscriptionExpiresAt,
       type: user.subscriptionType,
       expiresAt: user.subscriptionExpiresAt
     };
+  }
+
+  // DasWos Coins operations
+  private dasWosCoinsTransactions: any[] = [];
+
+  async getUserDasWosCoins(userId: number): Promise<number> {
+    // Calculate balance from transactions
+    const userTransactions = this.dasWosCoinsTransactions.filter(tx => tx.userId === userId);
+
+    let balance = 0;
+    for (const tx of userTransactions) {
+      if (tx.type === 'purchase' || tx.type === 'reward' || tx.type === 'refund' || tx.type === 'admin') {
+        balance += tx.amount;
+      } else if (tx.type === 'spend') {
+        balance -= tx.amount;
+      }
+    }
+
+    return balance;
+  }
+
+  async addDasWosCoins(userId: number, amount: number, type: string, description: string, metadata?: any): Promise<boolean> {
+    if (amount <= 0) return false;
+
+    const validTypes = ['purchase', 'reward', 'refund', 'admin'];
+    if (!validTypes.includes(type)) return false;
+
+    const transaction = {
+      id: this.dasWosCoinsTransactions.length + 1,
+      userId,
+      amount,
+      type,
+      description,
+      metadata,
+      status: 'completed',
+      createdAt: new Date()
+    };
+
+    this.dasWosCoinsTransactions.push(transaction);
+    return true;
+  }
+
+  async spendDasWosCoins(userId: number, amount: number, description: string, metadata?: any): Promise<boolean> {
+    if (amount <= 0) return false;
+
+    // Check if user has enough coins
+    const balance = await this.getUserDasWosCoins(userId);
+    if (balance < amount) return false;
+
+    const transaction = {
+      id: this.dasWosCoinsTransactions.length + 1,
+      userId,
+      amount,
+      type: 'spend',
+      description,
+      metadata,
+      status: 'completed',
+      createdAt: new Date()
+    };
+
+    this.dasWosCoinsTransactions.push(transaction);
+    return true;
+  }
+
+  async getDasWosCoinsTransactions(userId: number, limit?: number): Promise<any[]> {
+    let transactions = this.dasWosCoinsTransactions.filter(tx => tx.userId === userId);
+
+    // Sort by createdAt in descending order
+    transactions.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+    // Apply limit if provided
+    if (limit && limit > 0) {
+      transactions = transactions.slice(0, limit);
+    }
+
+    return transactions;
   }
 
   // Stub implementations for all other required methods

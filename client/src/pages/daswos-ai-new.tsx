@@ -4,7 +4,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { apiRequest } from "@/lib/queryClient";
-import { 
+import {
   Loader2, ShoppingBasket, Check, X, ShoppingCart, Settings,
   Info, ArrowRight, ArrowLeft, Coins, RefreshCw, Trash2, Play,
   Power as PowerIcon, PowerOff, PauseCircle, PlayCircle, Send,
@@ -77,6 +77,7 @@ import { formatPrice } from "@/lib/formatters";
 import DasWosCoinDisplay from "@/components/shared/daswos-coin-display";
 import DasWosCoinIcon from "@/components/shared/daswos-coin-icon";
 import TrustScore from "../components/products/trust-score";
+import CarouselSearchResults from '@/components/carousel-search-results';
 
 // Define schemas
 
@@ -156,23 +157,23 @@ function DaswosAiPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const isMobile = useIsMobile();
-  
+
   // State for settings dialog
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
-  
+
   // State for cart clearing confirmation dialog
   const [showClearCartDialog, setShowClearCartDialog] = useState(false);
-  
+
   // State for search
   const [searchQuery, setSearchQuery] = useState("");
-  
+
   // State for purchase countdown
   const [countdownActive, setCountdownActive] = useState(false);
   const [countdownSeconds, setCountdownSeconds] = useState(30); // Default 30 seconds countdown
-  
+
   // State for showing rejected items
   const [showRejectedItems, setShowRejectedItems] = useState(false);
-  
+
   // Chat-related state
   const [messages, setMessages] = useState<Message[]>([
     // Add welcome message
@@ -207,12 +208,12 @@ How would you like me to assist with your shopping today?`,
       minimumTrustScore: number;
     };
   }
-  
+
   // Fetch AI Shopper status and settings
-  const { 
-    data: aiShopperData, 
+  const {
+    data: aiShopperData,
     isLoading: isLoadingSettings,
-    refetch: refetchSettings 
+    refetch: refetchSettings
   } = useQuery({
     queryKey: ["/api/user/ai-shopper"],
     queryFn: async () => {
@@ -226,7 +227,7 @@ How would you like me to assist with your shopping today?`,
   });
 
   // Fetch DasWos Coins balance
-  const { 
+  const {
     data: coinsData = { balance: 0 }
   } = useQuery({
     queryKey: ["/api/user/daswos-coins/balance"],
@@ -241,8 +242,8 @@ How would you like me to assist with your shopping today?`,
   });
 
   // Fetch AI Shopper recommendations
-  const { 
-    data: recommendations = [], 
+  const {
+    data: recommendations = [],
     isLoading: isLoadingRecommendations,
     refetch: refetchRecommendations
   } = useQuery({
@@ -256,23 +257,23 @@ How would you like me to assist with your shopping today?`,
     refetchOnMount: false,
     refetchOnReconnect: false
   });
-  
+
   // Fetch cart items
-  const { 
-    data: cartItems = [], 
+  const {
+    data: cartItems = [],
     isLoading: isLoadingCart,
-    refetch: refetchCart 
+    refetch: refetchCart
   } = useQuery({
     queryKey: ['/api/user/cart'],
     queryFn: async () => {
-      return apiRequest<CartItemWithProduct[]>('/api/user/cart', { 
+      return apiRequest<CartItemWithProduct[]>('/api/user/cart', {
         method: 'GET',
         credentials: 'include' // Include cookies for session consistency
       });
     },
     staleTime: 30000, // 30 seconds
   });
-  
+
   // Clear cart mutation
   const clearCartMutation = useMutation({
     mutationFn: async () => {
@@ -283,13 +284,13 @@ How would you like me to assist with your shopping today?`,
         title: "Cart Cleared",
         description: "Your shopping cart has been cleared",
       });
-      
+
       // Refresh cart data
       queryClient.refetchQueries({
         queryKey: ['/api/user/cart'],
         exact: true
       });
-      
+
       // Close dialog
       setShowClearCartDialog(false);
     },
@@ -302,49 +303,49 @@ How would you like me to assist with your shopping today?`,
       console.error("Failed to clear cart:", error);
     }
   });
-  
+
   // Filter cart items to show only AI-selected items (from Daswos AI)
   const daswosCartItems = cartItems.filter(item => item.source === 'ai_shopper');
-  
+
   // Format seconds to HH:MM:SS
   const formatTime = (totalSeconds: number): string => {
     const hours = Math.floor(totalSeconds / 3600);
     const minutes = Math.floor((totalSeconds - (hours * 3600)) / 60);
     const seconds = totalSeconds - (hours * 3600) - (minutes * 60);
-    
+
     return [
       hours.toString().padStart(2, '0'),
       minutes.toString().padStart(2, '0'),
       seconds.toString().padStart(2, '0')
     ].join(':');
   };
-  
+
   // Chat message submission and response generation
   const generateResponseMutation = useMutation({
     mutationFn: async (data: { message: string }) => {
       return apiRequest<{ response: string; recommendations?: Recommendation[] }>(
-        "POST", 
-        "/api/user/ai-shopper/chat", 
+        "POST",
+        "/api/user/ai-shopper/chat",
         { message: data.message }
       );
     },
     onSuccess: (data, variables) => {
       setProcessingMessage(false);
-      
+
       // Update existing loading message with actual response
-      setMessages(prevMessages => 
-        prevMessages.map(msg => 
-          msg.loading ? 
+      setMessages(prevMessages =>
+        prevMessages.map(msg =>
+          msg.loading ?
             {
               ...msg,
               loading: false,
               content: data.response,
               recommendations: data.recommendations || []
-            } : 
+            } :
             msg
         )
       );
-      
+
       // Refresh recommendations if needed
       if (data.recommendations && data.recommendations.length > 0) {
         refetchRecommendations();
@@ -352,20 +353,20 @@ How would you like me to assist with your shopping today?`,
     },
     onError: (error) => {
       setProcessingMessage(false);
-      
+
       // Replace loading message with error message
-      setMessages(prevMessages => 
-        prevMessages.map(msg => 
-          msg.loading ? 
+      setMessages(prevMessages =>
+        prevMessages.map(msg =>
+          msg.loading ?
             {
               ...msg,
               loading: false,
               content: "Sorry, I encountered an error processing your request. Please try again later."
-            } : 
+            } :
             msg
         )
       );
-      
+
       toast({
         title: "Error",
         description: "Failed to get a response from the AI assistant. Please try again.",
@@ -374,18 +375,18 @@ How would you like me to assist with your shopping today?`,
       console.error("Failed to generate AI response:", error);
     }
   });
-  
+
   // Effect to scroll to bottom of chat when messages change
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages]);
-  
+
   // Effect for countdown timer
   useEffect(() => {
     let intervalId: NodeJS.Timeout | null = null;
-    
+
     // If countdown is active, start a timer to update every second
     if (countdownActive && countdownSeconds > 0) {
       intervalId = setInterval(() => {
@@ -407,22 +408,22 @@ How would you like me to assist with your shopping today?`,
       // If countdown is active but seconds is at 0, disable the countdown
       setCountdownActive(false);
     }
-    
+
     // Cleanup the interval on component unmount or when countdown stops
     return () => {
       if (intervalId) clearInterval(intervalId);
     };
   }, [countdownActive, countdownSeconds, toast]);
-  
+
   // Handle sending a chat message
   const handleSendMessage = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    
+
     if (!currentMessage.trim()) return;
-    
+
     // Save the message for processing
     const messageText = currentMessage;
-    
+
     // Add user message to chat
     const userMessage: Message = {
       id: `user-${Date.now()}`,
@@ -430,7 +431,7 @@ How would you like me to assist with your shopping today?`,
       content: messageText,
       timestamp: new Date()
     };
-    
+
     // Add assistant loading message
     const assistantMessage: Message = {
       id: `assistant-${Date.now()}`,
@@ -439,17 +440,17 @@ How would you like me to assist with your shopping today?`,
       timestamp: new Date(),
       loading: true
     };
-    
+
     setMessages(prev => [...prev, userMessage, assistantMessage]);
     setCurrentMessage("");
     setProcessingMessage(true);
-    
+
     // Check if this looks like a product search query
     const searchTerms = ["find", "search", "looking for", "recommend", "show me", "want to buy", "shop for"];
-    const isProductSearch = searchTerms.some(term => 
+    const isProductSearch = searchTerms.some(term =>
       messageText.toLowerCase().includes(term)
     );
-    
+
     // If it looks like a product search, also trigger the recommendation API
     if (isProductSearch) {
       // Generate recommendations through the API
@@ -458,11 +459,11 @@ How would you like me to assist with your shopping today?`,
         clearExisting: false
       });
     }
-    
+
     // Send message to server for AI response
     generateResponseMutation.mutate({ message: messageText });
   };
-  
+
   // Generate AI recommendations
   const generateRecommendationsMutation = useMutation({
     mutationFn: async (data?: {
@@ -480,14 +481,14 @@ How would you like me to assist with your shopping today?`,
             console.error("Failed to clear existing recommendations:", error);
           }
         }
-        
+
         // Include an empty query to prevent server from using undefined parameters
         const result = await apiRequest("POST", "/api/user/ai-shopper/generate", {
           searchQuery: data?.searchQuery || "",
           bulkBuy: data?.bulkBuy || false,
           shoppingList: data?.shoppingList || ""
         });
-        
+
         return result;
       } catch (error) {
         throw error;
@@ -502,15 +503,15 @@ How would you like me to assist with your shopping today?`,
           if (variables?.searchQuery && refreshData?.data) {
             const query = variables.searchQuery.toLowerCase();
             const newRecommendations = refreshData.data;
-            
+
             const freshRecommendations = newRecommendations.filter(rec => {
               const title = rec.product?.title?.toLowerCase() || "";
               const reason = rec.reason?.toLowerCase() || "";
-              
-              return (title.includes(query) || reason.includes(query)) && 
+
+              return (title.includes(query) || reason.includes(query)) &&
                 rec.status === "pending";
             });
-            
+
             if (freshRecommendations.length > 0) {
               // Add AI message with recommendations
               setMessages(prev => [...prev, {
@@ -523,11 +524,11 @@ How would you like me to assist with your shopping today?`,
             }
           }
         };
-        
+
         // Show recommendations with the fresh data
         showRecommendationsInChat();
       });
-      
+
       // Show success toast
       toast({
         title: "Success",
@@ -541,7 +542,7 @@ How would you like me to assist with your shopping today?`,
         variant: "destructive",
       });
       console.error("Failed to generate recommendations:", error);
-      
+
       // Add error message to chat
       setMessages(prev => [...prev, {
         id: `assistant-${Date.now()}`,
@@ -586,7 +587,7 @@ How would you like me to assist with your shopping today?`,
           const savedSettings = localStorage.getItem("daswosAiSettings");
           if (savedSettings) {
             const parsedSettings = JSON.parse(savedSettings);
-            
+
             // Only override the autoPurchase setting from localStorage if it exists
             if (typeof parsedSettings.autoPurchase !== "undefined") {
               console.log("Using localStorage autoPurchase value:", parsedSettings.autoPurchase);
@@ -616,12 +617,12 @@ How would you like me to assist with your shopping today?`,
     onSuccess: (data) => {
       // Create a more specific toast message based on what was updated
       const isAutoPurchaseToggled = typeof form.getValues("settings.autoPurchase") !== "undefined";
-      
+
       if (isAutoPurchaseToggled) {
         const autoPurchaseEnabled = form.getValues("settings.autoPurchase");
         toast({
           title: autoPurchaseEnabled ? "Automated Shopping Enabled" : "Automated Shopping Disabled",
-          description: autoPurchaseEnabled 
+          description: autoPurchaseEnabled
             ? "You can now use Daswos AI to automatically shop for you."
             : "Automated shopping has been disabled.",
         });
@@ -631,28 +632,28 @@ How would you like me to assist with your shopping today?`,
           description: "Your Daswos AI settings have been saved.",
         });
       }
-      
+
       // Force a complete refresh of AI shopper data
-      queryClient.invalidateQueries({ 
+      queryClient.invalidateQueries({
         queryKey: ["/api/user/ai-shopper"],
       });
-      
+
       // Also refresh recommendations if needed
       queryClient.invalidateQueries({
         queryKey: ["/api/user/ai-shopper/recommendations"],
       });
-      
+
       // Close settings dialog
       setIsSettingsDialogOpen(false);
-      
+
       // Add a message to the chat about settings change
       if (isAutoPurchaseToggled) {
         const autoPurchaseEnabled = form.getValues("settings.autoPurchase");
         setMessages(prev => [...prev, {
           id: `assistant-${Date.now()}`,
           role: 'assistant',
-          content: autoPurchaseEnabled 
-            ? "Automated shopping has been enabled. I'll now help you find and purchase products based on your preferences." 
+          content: autoPurchaseEnabled
+            ? "Automated shopping has been enabled. I'll now help you find and purchase products based on your preferences."
             : "Automated shopping has been disabled. I'll continue to recommend products, but won't make purchases automatically.",
           timestamp: new Date()
         }]);
@@ -675,11 +676,11 @@ How would you like me to assist with your shopping today?`,
     },
     onSuccess: () => {
       // Refresh recommendations
-      queryClient.refetchQueries({ 
+      queryClient.refetchQueries({
         queryKey: ["/api/user/ai-shopper/recommendations"],
         exact: true
       });
-      
+
       // Also refresh cart if needed
       if (status === 'added_to_cart') {
         queryClient.refetchQueries({
@@ -687,7 +688,7 @@ How would you like me to assist with your shopping today?`,
           exact: true
         });
       }
-      
+
       toast({
         title: "Success",
         description: "Recommendation updated successfully",
@@ -710,7 +711,7 @@ How would you like me to assist with your shopping today?`,
   const toggleEnabled = () => {
     const newValue = !form.getValues("enabled");
     form.setValue("enabled", newValue);
-    
+
     // Always submit the form when toggling enabled status
     onSubmit(form.getValues());
   };
@@ -724,13 +725,13 @@ How would you like me to assist with your shopping today?`,
       });
       return;
     }
-    
+
     // Update recommendation status
-    updateRecommendationMutation.mutate({ 
+    updateRecommendationMutation.mutate({
       id: recommendation.id,
       status: "added_to_cart"
     });
-    
+
     // Add a message to chat
     setMessages(prev => [...prev, {
       id: `assistant-${Date.now()}`,
@@ -743,12 +744,12 @@ How would you like me to assist with your shopping today?`,
   // Reject recommendation
   const rejectRecommendation = (recommendation: Recommendation) => {
     // Update recommendation status
-    updateRecommendationMutation.mutate({ 
+    updateRecommendationMutation.mutate({
       id: recommendation.id,
       status: "rejected",
       reason: "User rejected the recommendation"
     });
-    
+
     // Add a message to chat
     setMessages(prev => [...prev, {
       id: `assistant-${Date.now()}`,
@@ -757,12 +758,12 @@ How would you like me to assist with your shopping today?`,
       timestamp: new Date()
     }]);
   };
-  
+
   // Swap recommendation for an alternative
   const swapRecommendation = (recommendation: Recommendation) => {
     // Create a message ID to update later
     const messageId = `assistant-${Date.now()}`;
-    
+
     // Create a loading message first
     setMessages(prev => [...prev, {
       id: messageId,
@@ -774,34 +775,34 @@ How would you like me to assist with your shopping today?`,
 
     // Extract product type/category from the current product
     const productTitle = recommendation.product?.title || "";
-    
+
     // Create a more specific search query for an alternative product
     // Adding precision to help direct search based on product type
     let searchQuery = "";
     let productType = "";
-    
+
     // Detect product type from title and create a targeted query
-    if (productTitle.toLowerCase().includes("red") && 
+    if (productTitle.toLowerCase().includes("red") &&
         (productTitle.toLowerCase().includes("shoe") || productTitle.toLowerCase().includes("sneaker"))) {
       searchQuery = "red shoes alternative";
       productType = "shoes";
-    } else if (productTitle.toLowerCase().includes("headphone") || 
-               productTitle.toLowerCase().includes("earbuds") || 
+    } else if (productTitle.toLowerCase().includes("headphone") ||
+               productTitle.toLowerCase().includes("earbuds") ||
                productTitle.toLowerCase().includes("earphone")) {
       searchQuery = "wireless headphones alternative";
       productType = "headphones";
     } else if (productTitle.toLowerCase().includes("chair")) {
       searchQuery = "office chair alternative";
       productType = "furniture";
-    } else if (productTitle.toLowerCase().includes("table") || 
+    } else if (productTitle.toLowerCase().includes("table") ||
                productTitle.toLowerCase().includes("desk")) {
       searchQuery = "desk furniture alternative";
       productType = "furniture";
-    } else if (productTitle.toLowerCase().includes("sofa") || 
+    } else if (productTitle.toLowerCase().includes("sofa") ||
                productTitle.toLowerCase().includes("couch")) {
       searchQuery = "sofa furniture alternative";
-      productType = "furniture";  
-    } else if (productTitle.toLowerCase().includes("laptop") || 
+      productType = "furniture";
+    } else if (productTitle.toLowerCase().includes("laptop") ||
                productTitle.toLowerCase().includes("computer")) {
       searchQuery = "laptop alternative";
       productType = "electronics";
@@ -813,12 +814,12 @@ How would you like me to assist with your shopping today?`,
       searchQuery = `alternative for ${productTitle}`;
       productType = "product";
     }
-    
+
     console.log(`Finding alternative for: "${searchQuery}" (product type: ${productType})`);
-    
+
     // First, try to update the recommendation status to rejected
     // But continue with finding an alternative regardless of success
-    updateRecommendationMutation.mutate({ 
+    updateRecommendationMutation.mutate({
       id: recommendation.id,
       status: "rejected",
       reason: "User requested an alternative"
@@ -829,7 +830,7 @@ How would you like me to assist with your shopping today?`,
       },
       onSettled: () => {
         // Always proceed with finding an alternative, regardless of rejection success
-        
+
         // Generate new recommendations
         generateRecommendationsMutation.mutate({
           searchQuery: searchQuery,
@@ -839,9 +840,9 @@ How would you like me to assist with your shopping today?`,
             // Check if we got a successful recommendation with data
             if (data && data.recommendations && data.recommendations.length > 0) {
               console.log("Found alternative product successfully:", data.recommendations[0].product?.title);
-              
+
               // If successful, update the chat message to reflect success
-              setMessages(prev => prev.map(msg => 
+              setMessages(prev => prev.map(msg =>
                 msg.id === messageId ? {
                   ...msg,
                   loading: false,
@@ -849,23 +850,23 @@ How would you like me to assist with your shopping today?`,
                   recommendations: data.recommendations
                 } : msg
               ));
-              
+
             } else {
               // Response with success flag but no recommendations
               console.log("No alternatives found in response:", data);
-              
+
               // Check for status/message in the response
               const responseMessage = data?.message || `I couldn't find an alternative ${productType}. Would you like to try a different search?`;
-              
+
               // No alternative found, update the message
-              setMessages(prev => prev.map(msg => 
+              setMessages(prev => prev.map(msg =>
                 msg.id === messageId ? {
                   ...msg,
                   loading: false,
                   content: responseMessage
                 } : msg
               ));
-              
+
               toast({
                 title: `No alternative ${productType} found`,
                 description: "I couldn't find a suitable alternative. Try a different search query.",
@@ -875,16 +876,16 @@ How would you like me to assist with your shopping today?`,
           },
           onError: (err) => {
             console.error("Error finding alternative:", err);
-            
+
             // Update the message to show the error
-            setMessages(prev => prev.map(msg => 
+            setMessages(prev => prev.map(msg =>
               msg.id === messageId ? {
                 ...msg,
                 loading: false,
                 content: `I couldn't find an alternative ${productType} due to an error. Would you like to try a different search?`
               } : msg
             ));
-            
+
             toast({
               title: "Error finding alternative",
               description: "There was a problem searching for alternatives. Please try again.",
@@ -906,10 +907,10 @@ How would you like me to assist with your shopping today?`,
       });
       return;
     }
-    
+
     // Send search to the AI
     handleSendMessage();
-    
+
     // Provide search to the recommendations API
     generateRecommendationsMutation.mutate({
       searchQuery: searchQuery,
@@ -923,17 +924,17 @@ How would you like me to assist with your shopping today?`,
     if (!showRejectedItems && recommendation.status === "rejected") {
       return false;
     }
-    
+
     // Then filter by search query if one exists
     if (searchQuery.trim() !== "") {
       const query = searchQuery.toLowerCase();
       const title = recommendation.product?.title?.toLowerCase() || "";
       const reason = recommendation.reason?.toLowerCase() || "";
       const seller = recommendation.product?.sellerName?.toLowerCase() || "";
-      
+
       return title.includes(query) || reason.includes(query) || seller.includes(query);
     }
-    
+
     return true;
   });
 
@@ -945,28 +946,28 @@ How would you like me to assist with your shopping today?`,
   // Filter recommendations by status
   const pendingRecommendations = filteredRecommendations.filter(rec => rec.status === "pending");
   const purchasedRecommendations = filteredRecommendations.filter(rec => rec.status === "purchased");
-  
+
   // Filter for items that both have "added_to_cart" status AND are actually in the cart
-  const addedToCartRecommendations = filteredRecommendations.filter(rec => 
-    rec.status === "added_to_cart" && 
+  const addedToCartRecommendations = filteredRecommendations.filter(rec =>
+    rec.status === "added_to_cart" &&
     isProductInCart(rec.productId)
   );
-  
+
   // We might need to show some recommendations with "added_to_cart" status that are no longer in cart
   // They should be moved back to pending status
-  const cartRemovedRecommendations = filteredRecommendations.filter(rec => 
-    rec.status === "added_to_cart" && 
+  const cartRemovedRecommendations = filteredRecommendations.filter(rec =>
+    rec.status === "added_to_cart" &&
     !isProductInCart(rec.productId)
   );
-  
+
   // Add these to pending recommendations for display
   const allPendingRecommendations = [...pendingRecommendations, ...cartRemovedRecommendations];
-  
+
   const rejectedRecommendations = showRejectedItems ? filteredRecommendations.filter(rec => rec.status === "rejected") : [];
 
   // Loading states
   const isLoading = isLoadingSettings || isLoadingRecommendations || isLoadingCart;
-  
+
   // Handle message keydown
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -1010,7 +1011,7 @@ How would you like me to assist with your shopping today?`,
             </DropdownMenu>
           </div>
         </div>
-        
+
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Main Chat Interface */}
           <div className="lg:col-span-8">
@@ -1024,7 +1025,7 @@ How would you like me to assist with your shopping today?`,
                   Ask the AI to find products and make purchases with your Daswos coins
                 </CardDescription>
               </CardHeader>
-              
+
               <CardContent className="flex-grow overflow-y-auto pb-0">
                 <div className="flex flex-col space-y-4">
                   {messages.map((message) => (
@@ -1039,7 +1040,7 @@ How would you like me to assist with your shopping today?`,
                           <Bot className="h-4 w-4" />
                         </div>
                       )}
-                      
+
                       <div
                         className={`max-w-[85%] rounded-lg p-3 ${
                           message.role === "user"
@@ -1056,85 +1057,22 @@ How would you like me to assist with your shopping today?`,
                         ) : (
                           <div className="space-y-2">
                             <p className="whitespace-pre-wrap">{message.content}</p>
-                            
+
                             {/* Display recommendations if any */}
                             {message.recommendations && message.recommendations.length > 0 && (
                               <div className="mt-4 pt-3 border-t">
                                 <p className="font-medium mb-2">Recommended products:</p>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                  {message.recommendations.map((rec) => (
-                                    <div 
-                                      key={rec.id} 
-                                      className="border rounded-md p-3 bg-background shadow-sm hover:shadow-md transition-shadow"
-                                    >
-                                      <div className="flex items-start">
-                                        {rec.product?.imageUrl && (
-                                          <div className="w-20 h-20 mr-3 flex-shrink-0">
-                                            <img 
-                                              src={rec.product.imageUrl} 
-                                              alt={rec.product.title} 
-                                              className="w-full h-full object-cover rounded-md"
-                                            />
-                                          </div>
-                                        )}
-                                        <div className="flex-1 min-w-0">
-                                          <div className="flex justify-between items-start">
-                                            <p className="font-medium text-sm truncate mb-1">{rec.product?.title}</p>
-                                            <TrustScore score={rec.product?.trustScore || 0} size="sm" />
-                                          </div>
-                                          <p className="text-sm font-semibold text-primary">{formatPrice(rec.product?.price || 0)}</p>
-                                          <p className="text-xs text-muted-foreground mt-1 flex items-center">
-                                            <span className="truncate">
-                                              {rec.product?.sellerVerified ? (
-                                                <span className="flex items-center">
-                                                  <BadgeCheck className="h-3 w-3 text-primary mr-1" />
-                                                  {rec.product.sellerName || 'Verified Seller'}
-                                                </span>
-                                              ) : (
-                                                rec.product?.sellerName || 'Unknown Seller'
-                                              )}
-                                            </span>
-                                          </p>
-                                          <div className="grid grid-cols-3 mt-2 gap-2">
-                                            <Button 
-                                              size="sm" 
-                                              variant="default" 
-                                              className="h-7 text-xs"
-                                              onClick={() => addToCart(rec)}
-                                            >
-                                              <ShoppingCart className="h-3 w-3 mr-1" />
-                                              Add
-                                            </Button>
-                                            <Button 
-                                              size="sm" 
-                                              variant="secondary"
-                                              className="h-7 text-xs"
-                                              onClick={() => swapRecommendation(rec)}
-                                            >
-                                              <ArrowLeftRight className="h-3 w-3 mr-1" />
-                                              Swap
-                                            </Button>
-                                            <Button 
-                                              size="sm" 
-                                              variant="outline" 
-                                              className="h-7 text-xs"
-                                              onClick={() => rejectRecommendation(rec)}
-                                            >
-                                              <X className="h-3 w-3 mr-1" />
-                                              Reject
-                                            </Button>
-                                          </div>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  ))}
+                                <div className="mb-4">
+                                  <CarouselSearchResults
+                                    products={message.recommendations.map(rec => rec.product)}
+                                  />
                                 </div>
                               </div>
                             )}
                           </div>
                         )}
                       </div>
-                      
+
                       {message.role === "user" && (
                         <div className="bg-primary text-primary-foreground w-8 h-8 rounded-full flex items-center justify-center">
                           <User className="h-4 w-4" />
@@ -1145,7 +1083,7 @@ How would you like me to assist with your shopping today?`,
                   <div ref={messagesEndRef} />
                 </div>
               </CardContent>
-              
+
               <CardFooter className="pt-3">
                 <form onSubmit={handleSendMessage} className="flex w-full gap-2">
                   <Input
@@ -1157,8 +1095,8 @@ How would you like me to assist with your shopping today?`,
                     className="flex-1"
                     disabled={processingMessage}
                   />
-                  <Button 
-                    type="submit" 
+                  <Button
+                    type="submit"
                     disabled={!currentMessage.trim() || processingMessage}
                   >
                     {processingMessage ? (
@@ -1172,7 +1110,7 @@ How would you like me to assist with your shopping today?`,
               </CardFooter>
             </Card>
           </div>
-          
+
           {/* Sidebar: AI Status & Settings */}
           <div className="lg:col-span-4 space-y-4">
             {/* AI Status Card */}
@@ -1180,15 +1118,15 @@ How would you like me to assist with your shopping today?`,
               <CardHeader className="pb-3">
                 <div className="flex justify-between items-start">
                   <CardTitle className="text-lg">Automated Shopping Status</CardTitle>
-                  <Switch 
+                  <Switch
                     checked={form.watch("enabled")}
                     onCheckedChange={toggleEnabled}
                     disabled={updateSettingsMutation.isPending}
                   />
                 </div>
                 <CardDescription>
-                  {form.watch("enabled") 
-                    ? "Automated Shopping is active and ready to help" 
+                  {form.watch("enabled")
+                    ? "Automated Shopping is active and ready to help"
                     : "Enable Automated Shopping to use Daswos coins for purchases"}
                 </CardDescription>
               </CardHeader>
@@ -1210,7 +1148,7 @@ How would you like me to assist with your shopping today?`,
                       )}
                     </div>
                   </div>
-                  
+
                   <div className="bg-background rounded-md p-3 border">
                     <p className="text-xs text-muted-foreground">DasWos Coins</p>
                     <p className="text-lg font-medium mt-1 flex items-center">
@@ -1221,9 +1159,9 @@ How would you like me to assist with your shopping today?`,
                 </div>
               </CardContent>
               <CardFooter>
-                <Button 
-                  onClick={() => setIsSettingsDialogOpen(true)} 
-                  variant="outline" 
+                <Button
+                  onClick={() => setIsSettingsDialogOpen(true)}
+                  variant="outline"
                   className="w-full"
                 >
                   <Settings className="mr-2 h-4 w-4" />
@@ -1231,7 +1169,7 @@ How would you like me to assist with your shopping today?`,
                 </Button>
               </CardFooter>
             </Card>
-                        
+
             {/* Automated Shopping Cart */}
             <Card className="bg-primary/5 border-primary/20 mb-3">
               <CardHeader className="pb-2">
@@ -1311,9 +1249,9 @@ How would you like me to assist with your shopping today?`,
                         </div>
                         <div className="flex gap-2">
                           {!countdownActive ? (
-                            <Button 
-                              variant="outline" 
-                              size="sm" 
+                            <Button
+                              variant="outline"
+                              size="sm"
                               className="border-primary/30 bg-primary/10 hover:bg-primary/20"
                               onClick={() => {
                                 setCountdownSeconds(30);
@@ -1328,8 +1266,8 @@ How would you like me to assist with your shopping today?`,
                               Start
                             </Button>
                           ) : (
-                            <Button 
-                              variant="destructive" 
+                            <Button
+                              variant="destructive"
                               size="sm"
                               onClick={() => {
                                 setCountdownActive(false);
@@ -1347,7 +1285,7 @@ How would you like me to assist with your shopping today?`,
                       </div>
                     </div>
                   )}
-                  
+
                   {/* Cart footer with totals and action buttons */}
                   <CardFooter className="flex justify-between border-t pt-3">
                     <div>
@@ -1355,15 +1293,15 @@ How would you like me to assist with your shopping today?`,
                       <p className="text-xs text-muted-foreground">Using Daswos coins</p>
                     </div>
                     <div className="flex gap-2">
-                      <Button 
-                        variant="outline" 
+                      <Button
+                        variant="outline"
                         size="sm"
                         onClick={() => setShowClearCartDialog(true)}
                       >
                         Clear
                       </Button>
-                      <Button 
-                        variant="default" 
+                      <Button
+                        variant="default"
                         size="sm"
                         onClick={() => {
                           // If autoPurchase is enabled, start the countdown
@@ -1389,7 +1327,7 @@ How would you like me to assist with your shopping today?`,
                 </>
               )}
             </Card>
-            
+
             {/* Recommendations Count Badge */}
             <div className="flex items-center justify-between bg-white dark:bg-gray-800 rounded-lg p-3 border">
               <div className="flex items-center space-x-2">
@@ -1405,7 +1343,7 @@ How would you like me to assist with your shopping today?`,
                 </Badge>
               )}
             </div>
-            
+
             {/* Show rejected checkbox */}
             {recommendations.length > 0 && (
               <div className="flex items-center space-x-2 px-2">
@@ -1422,7 +1360,7 @@ How would you like me to assist with your shopping today?`,
           </div>
         </div>
       </div>
-      
+
       {/* Settings Dialog */}
       <Dialog open={isSettingsDialogOpen} onOpenChange={setIsSettingsDialogOpen}>
         <DialogContent className="sm:max-w-[500px]">
@@ -1432,7 +1370,7 @@ How would you like me to assist with your shopping today?`,
               Configure how Automated Shopping works for you
             </DialogDescription>
           </DialogHeader>
-          
+
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
               <div className="space-y-4">
@@ -1456,7 +1394,7 @@ How would you like me to assist with your shopping today?`,
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="settings.autoPurchase"
@@ -1478,7 +1416,7 @@ How would you like me to assist with your shopping today?`,
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="settings.budgetLimit"
@@ -1499,7 +1437,7 @@ How would you like me to assist with your shopping today?`,
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="settings.minimumTrustScore"
@@ -1522,7 +1460,7 @@ How would you like me to assist with your shopping today?`,
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="settings.preferredCategories"
@@ -1546,7 +1484,7 @@ How would you like me to assist with your shopping today?`,
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="settings.avoidTags"
@@ -1571,10 +1509,10 @@ How would you like me to assist with your shopping today?`,
                   )}
                 />
               </div>
-              
+
               <DialogFooter>
-                <Button 
-                  type="submit" 
+                <Button
+                  type="submit"
                   disabled={updateSettingsMutation.isPending || !form.watch("enabled")}
                 >
                   {updateSettingsMutation.isPending && (
@@ -1587,7 +1525,7 @@ How would you like me to assist with your shopping today?`,
           </Form>
         </DialogContent>
       </Dialog>
-      
+
       {/* Clear Cart Confirmation Dialog */}
       <AlertDialog open={showClearCartDialog} onOpenChange={setShowClearCartDialog}>
         <AlertDialogContent>

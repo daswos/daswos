@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'wouter';
+import { trackPageView, getPageTitle } from '@/lib/analytics';
 import {
   LogOutIcon, ShoppingBag, UserIcon, ShieldCheck, Search,
   Split, ShoppingCart, Plus, Minus, Trash2, Info, MessageSquare,
@@ -16,6 +17,7 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { DasWosCoinIcon } from '@/components/daswos-coin-icon';
 import DasWosCoinDisplay from '@/components/shared/daswos-coin-display';
+import AutoShopToggle from '@/components/autoshop-toggle';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -60,7 +62,13 @@ const QuickPurchaseButton: React.FC<QuickPurchaseButtonProps> = ({ amount }) => 
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ amount }),
+        body: JSON.stringify({
+          amount,
+          metadata: {
+            packageName: `${amount} DasWos Coins`,
+            purchaseTimestamp: new Date().toISOString()
+          }
+        }),
       });
 
       toast({
@@ -348,19 +356,34 @@ const Header = () => {
       `${path}${path.includes('?') ? '&' : '?'}sphere=safesphere` :
       `${path}${path.includes('?') ? '&' : '?'}sphere=opensphere`;
 
+    // Navigate using SPA structure
     setLocation(newPath);
+
+    // Track virtual page view for analytics
+    trackPageView(newPath);
   };
+
+  // Using the getPageTitle function from analytics.ts
 
   // Unused getInitials function removed
 
   return (
-    <header className="w-full sticky top-0 bg-gray-200 z-20 text-black">
+    <header className="w-full sticky top-0 bg-[#E0E0E0] z-20 text-black">
       <div className="container mx-auto px-4 py-2 flex items-center justify-between">
         {/* Home Button */}
         <div className="flex items-center">
           <button
-            onClick={() => handleNavigation('/')}
-            className="bg-white px-2 py-1 border border-gray-300 text-black flex items-center text-xs"
+            onClick={() => {
+              // Navigate to home page
+              handleNavigation('/');
+
+              // Dispatch event to reset search interface
+              const resetEvent = new CustomEvent('resetSearchInterface', {
+                detail: { reset: true }
+              });
+              window.dispatchEvent(resetEvent);
+            }}
+            className="bg-[#E0E0E0] px-2 py-1 border border-gray-300 text-black flex items-center text-xs"
             title="Home"
           >
             <Home className="h-4 w-4 mr-1" />
@@ -382,7 +405,7 @@ const Header = () => {
         {/* User Section */}
         <div className="flex items-center space-x-4">
           {/* DasWos Coins Balance - Converted to dropdown for quick purchase */}
-          {user && (
+          {user ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <div className="cursor-pointer">
@@ -392,7 +415,7 @@ const Header = () => {
                   />
                 </div>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="bg-white text-black p-1 border border-gray-300 rounded-none shadow-md w-64 user-dropdown">
+              <DropdownMenuContent align="end" className="bg-[#E0E0E0] text-black p-1 border border-gray-300 rounded-none shadow-md w-64 user-dropdown">
                 <div className="border-b border-gray-300 py-2 px-3 bg-gray-100">
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-medium">DasWos Coins</h3>
@@ -420,6 +443,14 @@ const Header = () => {
                 </div>
               </DropdownMenuContent>
             </DropdownMenu>
+          ) : (
+            <button
+              onClick={() => handleNavigation('/daswos-coins')}
+              className="bg-[#E0E0E0] px-2 py-1 border border-gray-300 text-black flex items-center text-xs"
+            >
+              <DasWosCoinIcon size={16} className="mr-1" />
+              <span>DasWos Coins</span>
+            </button>
           )}
 
           {/* AI Search Button removed - now positioned under search bar */}
@@ -427,26 +458,20 @@ const Header = () => {
           {/* Sell Button - Visible to all users */}
           <button
             onClick={() => handleNavigation(user?.isSeller ? '/my-listings' : '/seller-hub')}
-            className="bg-white px-2 py-1 border border-gray-300 text-black flex items-center text-xs mr-2"
+            className="bg-[#E0E0E0] px-2 py-1 border border-gray-300 text-black flex items-center text-xs mr-2"
           >
             <Store className="h-4 w-4 mr-1" />
             <span>Sell</span>
           </button>
 
           {/* AutoShop Button */}
-          <button
-            onClick={() => handleNavigation('/autoshop-dashboard')}
-            className="bg-white px-2 py-1 border border-gray-300 text-black flex items-center text-xs mr-2"
-          >
-            <ShoppingCart className="h-4 w-4 mr-1" />
-            <span>AutoShop</span>
-          </button>
+          <AutoShopToggle className="mr-2" />
 
           {/* Shopping Cart Button - Modern style matching user toggle */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
-                className="bg-white px-2 py-1 border border-gray-300 text-black flex items-center text-xs ml-2"
+                className="bg-[#E0E0E0] px-2 py-1 border border-gray-300 text-black flex items-center text-xs ml-2"
               >
                 <ShoppingCart className="h-4 w-4 mr-1" />
                 <span>Cart</span>
@@ -457,7 +482,7 @@ const Header = () => {
                 )}
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="bg-white text-black border border-gray-300 rounded-none p-0 w-72 md:w-80 user-dropdown">
+            <DropdownMenuContent align="end" className="bg-[#E0E0E0] text-black border border-gray-300 rounded-none p-0 w-72 md:w-80 user-dropdown">
               <div className="border-b border-gray-300 p-3 bg-gray-100">
                 <h2 className="text-base font-normal">Your Shopping Cart</h2>
                 <p className="text-xs text-gray-500">{cartItems.length || 0} items</p>
@@ -637,7 +662,7 @@ const Header = () => {
           {!user ? (
             <button
               onClick={() => handleNavigation('/auth')}
-              className="bg-white px-2 py-1 border border-gray-300 text-black text-xs items-center flex ml-2"
+              className="bg-[#E0E0E0] px-2 py-1 border border-gray-300 text-black text-xs items-center flex ml-2"
             >
               <UserIcon className="h-4 w-4 mr-1" />
               <span>Sign in</span>
@@ -645,12 +670,12 @@ const Header = () => {
           ) : (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="bg-white px-2 py-1 border border-gray-300 text-black flex items-center text-xs ml-2">
+                <button className="bg-[#E0E0E0] px-2 py-1 border border-gray-300 text-black flex items-center text-xs ml-2">
                   <UserIcon className="h-4 w-4 mr-1" />
                   <span>{user.username}</span>
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="bg-white text-black p-1 border border-gray-300 rounded-none shadow-md user-dropdown">
+              <DropdownMenuContent align="end" className="bg-[#E0E0E0] text-black p-1 border border-gray-300 rounded-none shadow-md user-dropdown">
                 <div className="border-b border-gray-300 py-1 px-2 text-center bg-gray-100">
                   <p className="text-xs font-medium">{user.username}</p>
                 </div>

@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { List, Bot, User, Package, FileText, Plus, MoreHorizontal, Home, ChevronsRight, Briefcase, LogOut, ShoppingCart, Coins } from 'lucide-react';
 import BulkBuyIcon from '@/components/icons/bulk-buy-icon';
 import SplitBuyIcon from '@/components/icons/split-buy-icon';
+import AutoShopIcon from '@/components/icons/auto-shop-icon';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 
@@ -34,6 +35,7 @@ const defaultItems: NavigationItem[] = [
   { id: 'daslist', label: 'das.list', path: '/d-list', icon: List },
   { id: 'jobs', label: 'Jobs', path: '/browse-jobs', icon: Briefcase },
   { id: 'ai-assistant', label: 'AI Assistant', path: '/ai-assistant', icon: Bot },
+  { id: 'autoshop', label: 'AutoShop', path: '/autoshop-dashboard', icon: AutoShopIcon },
   { id: 'cart', label: 'Cart', path: '/cart', icon: ShoppingCart },
   { id: 'daswos-coins', label: 'DasWos Coins', path: '/daswos-coins', icon: Coins }
 ];
@@ -51,6 +53,7 @@ const iconMap: Record<string, React.ComponentType<any>> = {
   'Plus': Plus,
   'Briefcase': Briefcase,
   'LogOut': LogOut,
+  'AutoShopIcon': AutoShopIcon,
   'ShoppingCart': ShoppingCart,
   'Coins': Coins
 };
@@ -62,6 +65,7 @@ export const availableItems: NavigationItem[] = [
   { id: 'daslist', label: 'das.list', path: '/d-list', icon: List },
   { id: 'jobs', label: 'Jobs', path: '/browse-jobs', icon: Briefcase },
   { id: 'ai-assistant', label: 'AI Assistant', path: '/ai-assistant', icon: Bot },
+  { id: 'autoshop', label: 'AutoShop', path: '/autoshop-dashboard', icon: AutoShopIcon },
   { id: 'cart', label: 'Cart', path: '/cart', icon: ShoppingCart },
   { id: 'daswos-coins', label: 'DasWos Coins', path: '/daswos-coins', icon: Coins }
 ];

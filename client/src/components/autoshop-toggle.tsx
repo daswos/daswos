@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { ShoppingCart, Loader2, Coins, Settings } from 'lucide-react';
 import { Label } from "@/components/ui/label";
-import AutoShopSettingsDialog from './autoshop-settings-dialog';
+import AutoShopSettingsDialog from './autoshop-settings-dialog-new';
 import { useToast } from '@/hooks/use-toast';
 import { useAutoShop } from '@/contexts/autoshop-context';
+import { useLocation } from 'wouter';
 
 interface AutoShopToggleProps {
   className?: string;
@@ -13,10 +14,11 @@ const AutoShopToggle: React.FC<AutoShopToggleProps> = ({
   className = ''
 }) => {
   const { toast } = useToast();
-  const { isAutoShopEnabled, enableAutoShop, disableAutoShop, userCoins, settings } = useAutoShop();
+  const { isAutoShopEnabled, enableAutoShop, disableAutoShop, userCoins, settings, timeRemaining, totalItems } = useAutoShop();
   const [isLoading, setIsLoading] = useState(false);
   const [statusText, setStatusText] = useState('');
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+  const [, setLocation] = useLocation();
 
   // Animated text effect for status message
   React.useEffect(() => {
@@ -115,9 +117,26 @@ const AutoShopToggle: React.FC<AutoShopToggleProps> = ({
               {isLoading ? 'Processing...' : 'AutoShop'}
             </span>
             {isAutoShopEnabled && (
-              <span className="ml-2 text-green-600 font-medium text-xs animated-text">
-                {statusText}
-              </span>
+              <>
+                <span className="ml-2 text-green-600 font-medium text-xs animated-text">
+                  {statusText}
+                </span>
+                {totalItems > 0 && (
+                  <div
+                    className="ml-2 flex items-center bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 text-[10px] rounded px-1.5 py-0.5 cursor-pointer hover:bg-blue-200 dark:hover:bg-blue-800/30 transition-colors"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      // Navigate to AutoShop dashboard with items view
+                      setLocation('/autoshop-dashboard?tab=items');
+                    }}
+                    title="View AutoShop items"
+                  >
+                    <ShoppingCart className="h-3 w-3 mr-1" />
+                    <span>{totalItems} item{totalItems !== 1 ? 's' : ''}</span>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </Label>
@@ -132,7 +151,16 @@ const AutoShopToggle: React.FC<AutoShopToggleProps> = ({
           </button>
         )}
 
-        <div className="ml-auto flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+        <div
+          className="ml-auto flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 cursor-pointer hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            // Navigate to DasWos coins section
+            setLocation('/daswos-coins');
+          }}
+          title="Go to DasWos Coins"
+        >
           <Coins className="h-3 w-3" />
           <span>{userCoins.toLocaleString()}</span>
         </div>

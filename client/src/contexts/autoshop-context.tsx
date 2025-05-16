@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { useDasWosCoins } from '@/hooks/use-daswos-coins';
 
 // Define the settings interface
 export interface AutoShopSettings {
@@ -12,6 +13,7 @@ export interface AutoShopSettings {
   categories: string[];
   customPrompt: string;
   useRandomMode: boolean;
+  itemsPerMinute: number; // Number of items to select per minute
 }
 
 // Define the context interface
@@ -22,6 +24,9 @@ interface AutoShopContextType {
   enableAutoShop: (settings: AutoShopSettings) => void;
   disableAutoShop: () => void;
   userCoins: number;
+  timeRemaining: number;
+  totalItems: number;
+  setTotalItems: React.Dispatch<React.SetStateAction<number>>;
 }
 
 // Create local storage keys
@@ -31,16 +36,17 @@ const AUTOSHOP_SETTINGS_KEY = 'daswos-autoshop-settings';
 
 // Default settings
 const DEFAULT_SETTINGS: AutoShopSettings = {
-  maxTotalCoins: 1000,
-  minItemPrice: 100,
-  maxItemPrice: 500,
+  maxTotalCoins: 5000,
+  minItemPrice: 5000,  // 50 dollars in cents
+  maxItemPrice: 25000, // 250 dollars in cents
   duration: {
     value: 30,
     unit: 'minutes'
   },
-  categories: [],
+  categories: ['Electronics', 'Sports & Outdoors', 'Fashion'],
   customPrompt: '',
-  useRandomMode: false
+  useRandomMode: false,
+  itemsPerMinute: 1 // Default to 1 item per minute
 };
 
 // Create the context
@@ -51,7 +57,9 @@ export const AutoShopProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [isAutoShopEnabled, setIsAutoShopEnabled] = useState(false);
   const [endTime, setEndTime] = useState<Date | null>(null);
   const [settings, setSettings] = useState<AutoShopSettings | null>(null);
-  const [userCoins, setUserCoins] = useState(5000); // Mock user coins - would come from API
+  const { balance } = useDasWosCoins(); // Use the DasWos coins hook
+  const [timeRemaining, setTimeRemaining] = useState(0);
+  const [totalItems, setTotalItems] = useState(0); // Mock items in AutoShop cart
 
   // Load state from localStorage on component mount
   useEffect(() => {
@@ -59,7 +67,7 @@ export const AutoShopProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (storedEnabled) {
       setIsAutoShopEnabled(storedEnabled === 'true');
     }
-    
+
     // Load end time if available
     const storedEndTime = localStorage.getItem(AUTOSHOP_END_TIME_KEY);
     if (storedEndTime) {
@@ -74,7 +82,7 @@ export const AutoShopProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setIsAutoShopEnabled(false);
       }
     }
-    
+
     // Load settings if available
     const storedSettings = localStorage.getItem(AUTOSHOP_SETTINGS_KEY);
     if (storedSettings) {
@@ -88,7 +96,7 @@ export const AutoShopProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     } else {
       setSettings(DEFAULT_SETTINGS);
     }
-    
+
     // Fetch user coins from API in a real implementation
     // For now, we'll use a mock value
   }, []);
@@ -97,7 +105,7 @@ export const AutoShopProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const calculateEndTime = (settings: AutoShopSettings): Date => {
     const now = new Date();
     const { value, unit } = settings.duration;
-    
+
     switch (unit) {
       case 'minutes':
         return new Date(now.getTime() + value * 60 * 1000);
@@ -115,19 +123,19 @@ export const AutoShopProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     // Save settings
     setSettings(newSettings);
     localStorage.setItem(AUTOSHOP_SETTINGS_KEY, JSON.stringify(newSettings));
-    
+
     // Calculate and save end time
     const newEndTime = calculateEndTime(newSettings);
     setEndTime(newEndTime);
     localStorage.setItem(AUTOSHOP_END_TIME_KEY, newEndTime.toISOString());
-    
+
     // Enable AutoShop
     setIsAutoShopEnabled(true);
     localStorage.setItem(AUTOSHOP_MODE_STORAGE_KEY, 'true');
-    
+
     // Dispatch a custom event so other components can react to this change
-    window.dispatchEvent(new CustomEvent('autoShopModeChanged', { 
-      detail: { enabled: true, settings: newSettings } 
+    window.dispatchEvent(new CustomEvent('autoShopModeChanged', {
+      detail: { enabled: true, settings: newSettings }
     }));
   };
 
@@ -135,14 +143,14 @@ export const AutoShopProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const disableAutoShop = () => {
     setIsAutoShopEnabled(false);
     setEndTime(null);
-    
+
     // Clear from localStorage
     localStorage.setItem(AUTOSHOP_MODE_STORAGE_KEY, 'false');
     localStorage.removeItem(AUTOSHOP_END_TIME_KEY);
-    
+
     // Dispatch a custom event
-    window.dispatchEvent(new CustomEvent('autoShopModeChanged', { 
-      detail: { enabled: false } 
+    window.dispatchEvent(new CustomEvent('autoShopModeChanged', {
+      detail: { enabled: false }
     }));
   };
 
@@ -157,11 +165,51 @@ export const AutoShopProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         const timeoutId = setTimeout(() => {
           disableAutoShop();
         }, endTime.getTime() - now.getTime());
-        
+
         return () => clearTimeout(timeoutId);
       }
     }
   }, [isAutoShopEnabled, endTime]);
+
+  // Update timeRemaining every second
+  useEffect(() => {
+    if (isAutoShopEnabled && endTime) {
+      // Initial calculation
+      const calculateTimeRemaining = () => {
+        const now = new Date();
+        if (now >= endTime) {
+          setTimeRemaining(0);
+          return false; // Return false to indicate time has expired
+        } else {
+          setTimeRemaining(endTime.getTime() - now.getTime());
+          return true; // Return true to continue interval
+        }
+      };
+
+      // Calculate immediately
+      const shouldContinue = calculateTimeRemaining();
+      if (!shouldContinue) return;
+
+      // Then set up interval to update every second
+      const intervalId = setInterval(() => {
+        const shouldContinue = calculateTimeRemaining();
+        if (!shouldContinue) {
+          clearInterval(intervalId);
+        }
+      }, 1000);
+
+      return () => clearInterval(intervalId);
+    } else {
+      setTimeRemaining(0);
+    }
+  }, [isAutoShopEnabled, endTime]);
+
+  // Reset total items when AutoShop is disabled
+  useEffect(() => {
+    if (!isAutoShopEnabled) {
+      setTotalItems(0);
+    }
+  }, [isAutoShopEnabled]);
 
   return (
     <AutoShopContext.Provider value={{
@@ -170,7 +218,10 @@ export const AutoShopProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       settings,
       enableAutoShop,
       disableAutoShop,
-      userCoins
+      userCoins: balance, // Use the balance from the DasWos coins hook
+      timeRemaining,
+      totalItems,
+      setTotalItems
     }}>
       {children}
     </AutoShopContext.Provider>

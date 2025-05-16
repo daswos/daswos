@@ -7,7 +7,7 @@ import connectPg from "connect-pg-simple";
 import session from "express-session";
 import memorystore from "memorystore";
 import { db } from "./db";
-import { eq, or, and, sql, ilike } from "drizzle-orm";
+import { eq, or, and, sql, ilike, like } from "drizzle-orm";
 import { log } from "./vite";
 // Simplified FallbackStorage class that implements the streamlined IStorage interface
 export class FallbackStorage implements IStorage {
