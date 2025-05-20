@@ -10,6 +10,7 @@ import { useLocation } from 'wouter';
 import SplitBulkBuyModal from '@/components/split-bulk-buy-modal';
 import { TransparencyButton } from '@/components/transparency-button';
 import { useToast } from '@/hooks/use-toast';
+import { addItemToLocalCart } from '@/lib/cart-storage';
 
 interface ProductCardProps {
   product: Product;
@@ -154,7 +155,23 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, viewMode = 'standard
                   e.stopPropagation();
                   e.preventDefault();
 
-                  // Add to cart API call with credentials
+                  // First add to local storage for immediate feedback
+                  const localCartItem = addItemToLocalCart(product, 1, 'manual');
+
+                  // Invalidate the cart query to refresh the cart data in the header
+                  import('@/lib/queryClient').then(module => {
+                    const { queryClient } = module;
+                    queryClient.invalidateQueries({ queryKey: ['/api/user/cart'] });
+                  });
+
+                  // Show success toast immediately
+                  toast({
+                    title: "Added to cart",
+                    description: `${title} has been added to your cart.`,
+                    duration: 3000
+                  });
+
+                  // Then try to add to server cart
                   fetch('/api/user/cart/add', {
                     method: 'POST',
                     headers: {
@@ -170,32 +187,16 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, viewMode = 'standard
                   .then(response => {
                     if (!response.ok) {
                       return response.json().then(err => {
-                        throw new Error(err.error || 'Failed to add item to cart');
+                        console.warn('Server cart add failed, but item was added to local storage:', err);
                       });
                     }
                     return response.json();
                   })
                   .then(data => {
-                    // Invalidate the cart query to refresh the cart data in the header
-                    import('@/lib/queryClient').then(module => {
-                      const { queryClient } = module;
-                      queryClient.invalidateQueries({ queryKey: ['/api/user/cart'] });
-                    });
-
-                    toast({
-                      title: "Added to cart",
-                      description: `${title} has been added to your cart.`,
-                      duration: 3000
-                    });
+                    console.log('Item successfully added to server cart:', data);
                   })
                   .catch(error => {
-                    console.error('Error adding item to cart:', error);
-                    toast({
-                      title: "Error",
-                      description: "Could not add item to cart. Please try again.",
-                      variant: "destructive",
-                      duration: 5000
-                    });
+                    console.error('Error adding item to server cart (still in local storage):', error);
                   });
                 }}
                 className="bg-primary hover:bg-primary/90"

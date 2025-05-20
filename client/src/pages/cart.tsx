@@ -7,6 +7,7 @@ import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { DasWosCoinIcon } from '@/components/daswos-coin-icon';
 import { apiRequest } from '@/lib/queryClient';
+import { getLocalCartItems, removeItemFromLocalCart, updateLocalCartItemQuantity, syncCartWithServer } from '@/lib/cart-storage';
 
 const formatPrice = (price: number) => {
   return `$${(price / 100).toFixed(2)}`;
@@ -17,21 +18,54 @@ const CartPage: React.FC = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Fetch cart items
+  // Fetch cart items with local storage fallback
   const {
     data: cartItems = [],
     isLoading: isCartLoading,
-    refetch: refetchCart
+    refetch: refetchCart,
+    error: cartError
   } = useQuery({
     queryKey: ['/api/user/cart'],
     queryFn: async () => {
-      return apiRequest('/api/user/cart', {
-        method: 'GET',
-        credentials: 'include' // Include cookies for session consistency
-      });
+      console.log('Fetching cart items...');
+      try {
+        // Try to get cart from server
+        const result = await apiRequest('/api/user/cart', {
+          method: 'GET',
+          credentials: 'include' // Include cookies for session consistency
+        });
+
+        console.log('Cart items fetched from server:', result);
+
+        // If server returned empty cart but we have items in local storage
+        if (result.length === 0) {
+          const localItems = getLocalCartItems();
+          if (localItems.length > 0) {
+            console.log('Using local storage cart items:', localItems);
+
+            // Try to sync local items to server
+            syncCartWithServer();
+
+            return localItems;
+          }
+        }
+
+        return result;
+      } catch (error) {
+        console.error('Error fetching cart from server, falling back to local storage:', error);
+        // Fallback to local storage if server request fails
+        const localItems = getLocalCartItems();
+        console.log('Using local storage cart items as fallback:', localItems);
+        return localItems;
+      }
     },
     staleTime: 30000, // 30 seconds
   });
+
+  // Log cart items for debugging
+  React.useEffect(() => {
+    console.log('Current cart items:', cartItems);
+  }, [cartItems]);
 
   // Calculate totals
   const regularTotal = cartItems
@@ -47,6 +81,10 @@ const CartPage: React.FC = () => {
     if (newQuantity < 1) return;
 
     try {
+      // Update in local storage first for immediate feedback
+      updateLocalCartItemQuantity(itemId, newQuantity);
+
+      // Then try to update on server
       await fetch(`/api/user/cart/item/${itemId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -63,11 +101,13 @@ const CartPage: React.FC = () => {
       });
     } catch (error) {
       console.error('Error updating quantity:', error);
+      // Even if server update fails, we've already updated local storage
+      queryClient.invalidateQueries({ queryKey: ['/api/user/cart'] });
+
       toast({
-        title: "Error",
-        description: "Could not update item quantity. Please try again.",
-        variant: "destructive",
-        duration: 5000
+        title: "Cart updated locally",
+        description: "Item quantity has been updated in your local cart.",
+        duration: 2000
       });
     }
   };
@@ -75,6 +115,10 @@ const CartPage: React.FC = () => {
   // Handle item removal
   const handleRemoveItem = async (itemId: number) => {
     try {
+      // Remove from local storage first for immediate feedback
+      removeItemFromLocalCart(itemId);
+
+      // Then try to remove from server
       await fetch(`/api/user/cart/item/${itemId}`, {
         method: 'DELETE',
         credentials: 'include'
@@ -88,12 +132,14 @@ const CartPage: React.FC = () => {
         duration: 2000
       });
     } catch (error) {
-      console.error('Error removing item:', error);
+      console.error('Error removing item from server:', error);
+      // Even if server removal fails, we've already removed from local storage
+      queryClient.invalidateQueries({ queryKey: ['/api/user/cart'] });
+
       toast({
-        title: "Error",
-        description: "Could not remove item. Please try again.",
-        variant: "destructive",
-        duration: 5000
+        title: "Item removed locally",
+        description: "Item has been removed from your local cart.",
+        duration: 2000
       });
     }
   };
@@ -253,7 +299,7 @@ const CartPage: React.FC = () => {
 
               <Button
                 className="w-full bg-primary hover:bg-primary/90 text-black dark:text-black font-medium"
-                onClick={handleCheckout}
+                onClick={() => navigate('/checkout')}
               >
                 <ShoppingCart className="h-4 w-4 mr-2" />
                 Proceed to Checkout

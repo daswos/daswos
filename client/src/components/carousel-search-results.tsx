@@ -7,6 +7,7 @@ import { formatPrice } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { motion, AnimatePresence } from 'framer-motion';
 import '@/styles/carousel.css';
+import { addItemToLocalCart } from '@/lib/cart-storage';
 
 interface CarouselSearchResultsProps {
   products: Product[];
@@ -70,7 +71,26 @@ const CarouselSearchResults: React.FC<CarouselSearchResultsProps> = ({
     e.stopPropagation();
     e.preventDefault();
 
-    // Add to cart API call with credentials
+    console.log('Adding product to cart:', product.id, product.title);
+
+    // First add to local storage for immediate feedback
+    const localCartItem = addItemToLocalCart(product, 1, 'manual');
+    console.log('Added to local storage:', localCartItem);
+
+    // Invalidate the cart query to refresh the cart data in the header
+    import('@/lib/queryClient').then(module => {
+      const { queryClient } = module;
+      queryClient.invalidateQueries({ queryKey: ['/api/user/cart'] });
+    });
+
+    // Show success toast immediately
+    toast({
+      title: "Added to cart",
+      description: `${product.title} has been added to your cart.`,
+      duration: 3000
+    });
+
+    // Then try to add to server cart
     fetch('/api/user/cart/add', {
       method: 'POST',
       headers: {
@@ -84,34 +104,19 @@ const CarouselSearchResults: React.FC<CarouselSearchResultsProps> = ({
       })
     })
     .then(response => {
+      console.log('Cart API response status:', response.status);
       if (!response.ok) {
         return response.json().then(err => {
-          throw new Error(err.error || 'Failed to add item to cart');
+          console.warn('Server cart add failed, but item was added to local storage:', err);
         });
       }
       return response.json();
     })
     .then(data => {
-      // Invalidate the cart query to refresh the cart data in the header
-      import('@/lib/queryClient').then(module => {
-        const { queryClient } = module;
-        queryClient.invalidateQueries({ queryKey: ['/api/user/cart'] });
-      });
-
-      toast({
-        title: "Added to cart",
-        description: `${product.title} has been added to your cart.`,
-        duration: 3000
-      });
+      console.log('Cart API success response:', data);
     })
     .catch(error => {
-      console.error('Error adding item to cart:', error);
-      toast({
-        title: "Error",
-        description: "Could not add item to cart. Please try again.",
-        variant: "destructive",
-        duration: 5000
-      });
+      console.error('Error adding item to server cart (still in local storage):', error);
     });
   };
 

@@ -21,6 +21,10 @@ const AiAssistant = lazy(() => import('@/pages/ai-assistant'));
 const Cart = lazy(() => import('@/pages/cart'));
 const DasWosCoins = lazy(() => import('@/pages/daswos-coins'));
 
+// Checkout and order pages
+const Checkout = lazy(() => import('@/pages/checkout'));
+const OrderConfirmation = lazy(() => import('@/pages/order-confirmation'));
+
 // Loading fallback component
 const LoadingFallback = () => (
   <div className="flex items-center justify-center h-full w-full py-12">
@@ -74,6 +78,10 @@ const PageManager: React.FC = () => {
         return <Cart />;
       case '/daswos-coins':
         return <DasWosCoins />;
+      case '/checkout':
+        return <Checkout />;
+      case '/order-confirmation':
+        return <OrderConfirmation />;
       default:
         return <NotFound />;
     }

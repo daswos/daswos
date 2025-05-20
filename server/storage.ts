@@ -3,8 +3,17 @@ import {
   users, type User, type InsertUser,
   informationContent, type InformationContent,
   aiShopperRecommendations, type AiShopperRecommendation, type InsertAiShopperRecommendation,
-  categories
+  categories,
+  orders,
+  orderItems
 } from "@shared/schema";
+import {
+  pendingPayouts,
+  type InsertOrder,
+  type Order,
+  type InsertPendingPayout,
+  type PendingPayout
+} from "@shared/checkout-schema";
 import connectPg from "connect-pg-simple";
 import session from "express-session";
 import memorystore from "memorystore";
@@ -329,6 +338,14 @@ export class FallbackStorage implements IStorage {
   private autoShopPendingItems: Map<string, any[]> = new Map();
   private autoShopOrderHistory: Map<string, any[]> = new Map();
 
+  // Order operations
+  private orders: Map<number, Order> = new Map();
+  private ordersByUserId: Map<number, number[]> = new Map();
+  private ordersByTransferGroup: Map<string, number> = new Map();
+  private pendingPayouts: Map<number, PendingPayout> = new Map();
+  private pendingPayoutsBySellerId: Map<number, number[]> = new Map();
+  private sellers: Map<number, any> = new Map();
+
   async getAutoShopStatus(userId: string | number): Promise<any> {
     const key = userId.toString();
     return this.autoShopStatus.get(key) || { active: false };
@@ -389,6 +406,134 @@ export class FallbackStorage implements IStorage {
     items.push(item);
     this.autoShopOrderHistory.set(key, items);
     return true;
+  }
+
+  // Order operations
+  async createOrder(order: InsertOrder): Promise<Order> {
+    const orderId = this.orders.size + 1;
+
+    const newOrder: Order = {
+      id: orderId,
+      userId: order.userId,
+      orderDate: new Date(),
+      totalAmount: order.totalAmount,
+      status: order.status || 'pending',
+      paymentMethod: order.paymentMethod || 'credit_card',
+      paymentIntentId: order.paymentIntentId,
+      transferGroup: order.transferGroup,
+      shippingInfo: order.shippingInfo,
+      metadata: order.metadata,
+      createdAt: new Date()
+    };
+
+    this.orders.set(orderId, newOrder);
+
+    // Add to user's orders
+    if (order.userId) {
+      const userOrders = this.ordersByUserId.get(order.userId) || [];
+      userOrders.push(orderId);
+      this.ordersByUserId.set(order.userId, userOrders);
+    }
+
+    // Add to transfer group index
+    if (order.transferGroup) {
+      this.ordersByTransferGroup.set(order.transferGroup, orderId);
+    }
+
+    return newOrder;
+  }
+
+  async getOrderById(id: number): Promise<Order | undefined> {
+    return this.orders.get(id);
+  }
+
+  async getOrdersByUserId(userId: number): Promise<Order[]> {
+    const orderIds = this.ordersByUserId.get(userId) || [];
+    return orderIds.map(id => this.orders.get(id)).filter(Boolean) as Order[];
+  }
+
+  async getOrderByTransferGroup(transferGroup: string): Promise<Order | undefined> {
+    const orderId = this.ordersByTransferGroup.get(transferGroup);
+    return orderId ? this.orders.get(orderId) : undefined;
+  }
+
+  async updateOrderStatus(id: number, status: string): Promise<Order> {
+    const order = this.orders.get(id);
+    if (!order) {
+      throw new Error(`Order with ID ${id} not found`);
+    }
+
+    const updatedOrder = {
+      ...order,
+      status,
+      updatedAt: new Date()
+    };
+
+    this.orders.set(id, updatedOrder);
+    return updatedOrder;
+  }
+
+  // Pending payout operations
+  async createPendingPayout(payout: InsertPendingPayout): Promise<PendingPayout> {
+    const payoutId = this.pendingPayouts.size + 1;
+
+    const newPayout: PendingPayout = {
+      id: payoutId,
+      sellerId: payout.sellerId,
+      orderId: payout.orderId,
+      amount: payout.amount,
+      status: payout.status || 'pending',
+      paymentMethod: payout.paymentMethod || 'bank_transfer',
+      paymentReference: payout.paymentReference,
+      notes: payout.notes,
+      metadata: payout.metadata,
+      createdAt: new Date()
+    };
+
+    this.pendingPayouts.set(payoutId, newPayout);
+
+    // Add to seller's payouts
+    const sellerPayouts = this.pendingPayoutsBySellerId.get(payout.sellerId) || [];
+    sellerPayouts.push(payoutId);
+    this.pendingPayoutsBySellerId.set(payout.sellerId, sellerPayouts);
+
+    return newPayout;
+  }
+
+  async getPendingPayoutById(id: number): Promise<PendingPayout | undefined> {
+    return this.pendingPayouts.get(id);
+  }
+
+  async getPendingPayoutsBySellerId(sellerId: number): Promise<PendingPayout[]> {
+    const payoutIds = this.pendingPayoutsBySellerId.get(sellerId) || [];
+    return payoutIds.map(id => this.pendingPayouts.get(id)).filter(Boolean) as PendingPayout[];
+  }
+
+  async updatePendingPayoutStatus(id: number, status: string, paymentReference?: string): Promise<PendingPayout> {
+    const payout = this.pendingPayouts.get(id);
+    if (!payout) {
+      throw new Error(`Pending payout with ID ${id} not found`);
+    }
+
+    const updatedPayout = {
+      ...payout,
+      status,
+      paymentReference: paymentReference || payout.paymentReference,
+      processedAt: status === 'completed' ? new Date() : payout.processedAt
+    };
+
+    this.pendingPayouts.set(id, updatedPayout);
+    return updatedPayout;
+  }
+
+  // Seller operations
+  async getSellerById(id: number): Promise<any | undefined> {
+    return this.sellers.get(id) || {
+      id,
+      userId: id,
+      name: `Seller ${id}`,
+      stripeAccountId: `acct_mock_${id}`
+    };
   }
 }
 
@@ -464,6 +609,22 @@ export interface IStorage {
   clearAutoShopItems(userId: string | number): Promise<boolean>;
   getAutoShopOrderHistory(userId: string | number): Promise<any[]>;
   addAutoShopOrderHistoryItem(userId: string | number, item: any): Promise<boolean>;
+
+  // Order operations
+  createOrder(order: InsertOrder): Promise<Order>;
+  getOrderById(id: number): Promise<Order | undefined>;
+  getOrdersByUserId(userId: number): Promise<Order[]>;
+  getOrderByTransferGroup(transferGroup: string): Promise<Order | undefined>;
+  updateOrderStatus(id: number, status: string): Promise<Order>;
+
+  // Pending payout operations
+  createPendingPayout(payout: InsertPendingPayout): Promise<PendingPayout>;
+  getPendingPayoutById(id: number): Promise<PendingPayout | undefined>;
+  getPendingPayoutsBySellerId(sellerId: number): Promise<PendingPayout[]>;
+  updatePendingPayoutStatus(id: number, status: string, paymentReference?: string): Promise<PendingPayout>;
+
+  // Seller operations
+  getSellerById(id: number): Promise<any | undefined>;
 }
 
 // Database storage implementation
@@ -3289,7 +3450,35 @@ export class DatabaseStorage implements IStorage {
   // Order operations
   async createOrder(order: InsertOrder): Promise<Order> {
     try {
-      const [result] = await db.insert(orders).values(order).returning();
+      // Extract items from the order data
+      const { items, ...orderData } = order;
+
+      // Create the order record
+      const [result] = await db.insert(orders).values({
+        userId: orderData.userId || null,
+        totalAmount: orderData.totalAmount,
+        status: orderData.status || 'pending',
+        paymentMethod: orderData.paymentMethod || 'credit_card',
+        paymentReference: orderData.paymentIntentId,
+        transferGroup: orderData.transferGroup,
+        shippingAddress: JSON.stringify(orderData.shippingInfo || {}),
+        billingAddress: JSON.stringify(orderData.shippingInfo || {}), // Use shipping as billing for now
+        metadata: orderData.metadata || {}
+      }).returning();
+
+      // Create order items
+      if (items && items.length > 0) {
+        for (const item of items) {
+          await db.insert(orderItems).values({
+            orderId: result.id,
+            productId: item.productId,
+            quantity: item.quantity,
+            priceAtPurchase: item.price,
+            itemNameSnapshot: item.name
+          });
+        }
+      }
+
       return result;
     } catch (error) {
       console.error("Error creating order:", error);
@@ -3319,6 +3508,18 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  async getOrderByTransferGroup(transferGroup: string): Promise<Order | undefined> {
+    try {
+      const [order] = await db.select()
+        .from(orders)
+        .where(eq(orders.transferGroup, transferGroup));
+      return order;
+    } catch (error) {
+      console.error("Error getting order by transfer group:", error);
+      return undefined;
+    }
+  }
+
   async updateOrderStatus(id: number, status: string): Promise<Order> {
     try {
       const [order] = await db
@@ -3337,24 +3538,88 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async addOrderItem(orderItem: InsertOrderItem): Promise<OrderItem> {
+  // Pending payout operations
+  async createPendingPayout(payout: InsertPendingPayout): Promise<PendingPayout> {
     try {
-      const [result] = await db.insert(orderItems).values(orderItem).returning();
+      const [result] = await db.insert(pendingPayouts).values({
+        sellerId: payout.sellerId,
+        orderId: payout.orderId,
+        amount: payout.amount,
+        status: payout.status || 'pending',
+        paymentMethod: payout.paymentMethod || 'bank_transfer',
+        paymentReference: payout.paymentReference,
+        notes: payout.notes,
+        metadata: payout.metadata || {}
+      }).returning();
+
       return result;
     } catch (error) {
-      console.error("Error adding order item:", error);
+      console.error("Error creating pending payout:", error);
       throw error;
     }
   }
 
-  async getOrderItemsByOrderId(orderId: number): Promise<OrderItem[]> {
+  async getPendingPayoutById(id: number): Promise<PendingPayout | undefined> {
+    try {
+      const [payout] = await db.select().from(pendingPayouts).where(eq(pendingPayouts.id, id));
+      return payout;
+    } catch (error) {
+      console.error("Error getting pending payout by ID:", error);
+      return undefined;
+    }
+  }
+
+  async getPendingPayoutsBySellerId(sellerId: number): Promise<PendingPayout[]> {
     try {
       return await db.select()
-        .from(orderItems)
-        .where(eq(orderItems.orderId, orderId));
+        .from(pendingPayouts)
+        .where(eq(pendingPayouts.sellerId, sellerId))
+        .orderBy(desc(pendingPayouts.createdAt));
     } catch (error) {
-      console.error("Error getting order items by order ID:", error);
+      console.error("Error getting pending payouts by seller ID:", error);
       return [];
+    }
+  }
+
+  async updatePendingPayoutStatus(id: number, status: string, paymentReference?: string): Promise<PendingPayout> {
+    try {
+      const updateData: any = {
+        status,
+        processedAt: status === 'completed' ? new Date() : undefined
+      };
+
+      if (paymentReference) {
+        updateData.paymentReference = paymentReference;
+      }
+
+      const [payout] = await db
+        .update(pendingPayouts)
+        .set(updateData)
+        .where(eq(pendingPayouts.id, id))
+        .returning();
+
+      return payout;
+    } catch (error) {
+      console.error("Error updating pending payout status:", error);
+      throw error;
+    }
+  }
+
+  // Seller operations
+  async getSellerById(id: number): Promise<any | undefined> {
+    try {
+      // For now, we'll just return a user with the seller ID
+      // In a real implementation, this would fetch from a sellers table
+      const [user] = await db.select().from(users).where(eq(users.id, id));
+      return user ? {
+        id,
+        userId: user.id,
+        name: user.fullName,
+        stripeAccountId: user.stripeAccountId
+      } : undefined;
+    } catch (error) {
+      console.error("Error getting seller by ID:", error);
+      return undefined;
     }
   }
 

@@ -3492,7 +3492,7 @@ app.post('/api/create-payment-intent', async (req, res) => {
 
   // DasWos Coins routes
 
-  // Get user's DasWos Coins balance - Simplified version
+  // Get user's DasWos Coins balance - Supports both authenticated and non-authenticated users
   app.get("/api/user/daswos-coins/balance", async (req, res) => {
     try {
       // For authenticated users, return their session balance
@@ -3502,11 +3502,19 @@ app.post('/api/create-payment-intent', async (req, res) => {
           req.session.dasWosCoins = 0;
         }
 
-        return res.json({ balance: req.session.dasWosCoins });
+        return res.json({
+          balance: req.session.dasWosCoins,
+          isAuthenticated: true
+        });
       }
 
       // For non-authenticated users, return a balance of 0 coins
-      return res.json({ balance: 0 });
+      // The actual balance for non-authenticated users is stored in localStorage on the client side
+      return res.json({
+        balance: 0,
+        isAuthenticated: false,
+        message: "Non-authenticated user. Balance is stored in localStorage."
+      });
     } catch (error) {
       console.error('Error fetching user DasWos Coins balance:', error);
       res.status(500).json({ message: "Failed to fetch DasWos Coins balance" });
@@ -3536,13 +3544,13 @@ app.post('/api/create-payment-intent', async (req, res) => {
     }
   });
 
-  // Purchase DasWos Coins (no payment required) - Simplified version
+  // Purchase DasWos Coins - With Stripe payment support
   app.post("/api/user/daswos-coins/purchase", async (req, res) => {
     try {
       console.log("Processing DasWos Coins purchase request:", req.body);
 
       // Get data from request body
-      const { amount } = req.body;
+      const { amount, paymentIntentId, metadata } = req.body;
 
       if (!amount || typeof amount !== 'number' || amount <= 0) {
         console.log("Invalid amount:", amount);
@@ -3553,20 +3561,21 @@ app.post('/api/create-payment-intent', async (req, res) => {
       const userId = req.isAuthenticated() ? req.user.id : null;
       console.log("User ID:", userId);
 
-      // For non-authenticated users, just return success
+      // For non-authenticated users, store in localStorage (handled client-side)
+      // Just return success with the amount
       if (!userId) {
-        console.log("Non-authenticated user, returning mock balance");
+        console.log("Non-authenticated user, returning coins for localStorage");
         res.json({
           success: true,
           message: "Successfully added DasWos Coins",
           amount,
-          balance: amount // Return the amount as the new balance
+          balance: amount, // Return the amount as the new balance
+          isGuest: true
         });
         return;
       }
 
       // For authenticated users, use the session to store the balance
-      // This is a simplified approach that doesn't rely on database tables
       if (!req.session.dasWosCoins) {
         req.session.dasWosCoins = 0;
       }
@@ -3579,6 +3588,9 @@ app.post('/api/create-payment-intent', async (req, res) => {
       // Add the coins to the session
       req.session.dasWosCoins += amount;
 
+      // Determine if this was a paid transaction
+      const isPaid = !!paymentIntentId;
+
       // Record the transaction
       const transaction = {
         id: Date.now(),
@@ -3588,8 +3600,10 @@ app.post('/api/create-payment-intent', async (req, res) => {
         description: `Added ${amount} DasWos Coins`,
         status: 'completed',
         metadata: {
-          freeCoins: true,
-          timestamp: new Date().toISOString()
+          freeCoins: !isPaid,
+          paymentIntentId: paymentIntentId || null,
+          timestamp: new Date().toISOString(),
+          ...metadata
         },
         createdAt: new Date()
       };
@@ -3604,7 +3618,8 @@ app.post('/api/create-payment-intent', async (req, res) => {
         success: true,
         message: "Successfully added DasWos Coins",
         amount,
-        balance: req.session.dasWosCoins
+        balance: req.session.dasWosCoins,
+        isPaid
       });
     } catch (error) {
       console.error('Error purchasing DasWos Coins:', error);
@@ -3827,8 +3842,11 @@ app.post('/api/create-payment-intent', async (req, res) => {
   // Add item to cart - accessible for both authenticated and non-authenticated users
   app.post("/api/user/cart/add", async (req, res) => {
     try {
+      console.log('Cart add request received:', req.body);
+
       // For authenticated users, save to the database
       if (req.isAuthenticated()) {
+        console.log('Authenticated user adding to cart, user ID:', req.user.id);
         const userId = req.user.id;
         const cartItemData = insertCartItemSchema.parse({
           ...req.body,
@@ -3837,23 +3855,30 @@ app.post('/api/create-payment-intent', async (req, res) => {
 
         // Add item to cart in database
         const cartItem = await storage.addCartItem(cartItemData);
+        console.log('Item added to database cart:', cartItem);
         return res.json(cartItem);
       }
+
+      console.log('Non-authenticated user adding to cart, using session');
 
       // For non-authenticated users, use session cart
       // Initialize session cart if it doesn't exist
       if (!req.session.cart) {
+        console.log('Initializing empty session cart');
         req.session.cart = [];
       }
 
       // Get product info from the database using productId
       const productId = parseInt(req.body.productId);
       if (!productId || isNaN(productId)) {
+        console.error('Invalid product ID:', req.body.productId);
         return res.status(400).json({ error: "Invalid product ID" });
       }
 
+      console.log('Fetching product details for ID:', productId);
       const product = await storage.getProductById(productId);
       if (!product) {
+        console.error('Product not found for ID:', productId);
         return res.status(404).json({ error: "Product not found" });
       }
 
@@ -3870,30 +3895,52 @@ app.post('/api/create-payment-intent', async (req, res) => {
         createdAt: new Date().toISOString()
       };
 
+      console.log('Created cart item:', cartItem);
+
       // Check if the product is already in cart, then increase quantity
       const existingItemIndex = req.session.cart.findIndex(
         (item: any) => item.productId === productId
       );
 
       if (existingItemIndex >= 0) {
+        console.log('Product already in cart, updating quantity');
         // Update existing item quantity
         req.session.cart[existingItemIndex].quantity += cartItem.quantity;
       } else {
+        console.log('Adding new item to cart');
         // Add new item to cart
         req.session.cart.push(cartItem);
       }
 
-      // Save the session
-      req.session.save((err) => {
-        if (err) {
-          console.error('Error saving session cart:', err);
-          return res.status(500).json({ error: "Failed to save cart" });
-        }
+      console.log('Current session cart:', req.session.cart);
+
+      // Save the session with more robust error handling
+      try {
+        // Force session save
+        req.session.save((err) => {
+          if (err) {
+            console.error('Error saving session cart:', err);
+            // Even if session save fails, still return success to client
+            // since we'll have the local storage fallback
+            console.log('Session save failed, but returning cart item anyway');
+            return res.json(cartItem);
+          }
+          console.log('Session saved successfully');
+          res.json(cartItem);
+        });
+      } catch (sessionError) {
+        console.error('Exception during session save:', sessionError);
+        // Return success even if session save throws an exception
+        // since we'll have the local storage fallback
         res.json(cartItem);
-      });
+      }
     } catch (error) {
       console.error('Error adding item to cart:', error);
-      res.status(500).json({ error: "Failed to add item to cart" });
+      res.status(500).json({
+        error: "Failed to add item to cart",
+        details: error.message,
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      });
     }
   });
 

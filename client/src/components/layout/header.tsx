@@ -18,6 +18,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { DasWosCoinIcon } from '@/components/daswos-coin-icon';
 import DasWosCoinDisplay from '@/components/shared/daswos-coin-display';
 import AutoShopToggle from '@/components/autoshop-toggle';
+import { getLocalCartItems } from '@/lib/cart-storage';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -142,14 +143,36 @@ const Header = () => {
     staleTime: 60000, // 1 minute
   });
 
-  // Fetch cart items for all users (authenticated or not)
+  // Fetch cart items for all users (authenticated or not) with local storage fallback
   const { data: cartItems = [], isLoading: isCartLoading } = useQuery({
     queryKey: ['/api/user/cart'],
     queryFn: async () => {
-      return apiRequest('/api/user/cart', {
-        method: 'GET',
-        credentials: 'include' // Include cookies for session consistency
-      });
+      try {
+        // Try to get cart from server
+        const result = await apiRequest('/api/user/cart', {
+          method: 'GET',
+          credentials: 'include' // Include cookies for session consistency
+        });
+
+        console.log('Cart items fetched from server in header:', result);
+
+        // If server returned empty cart but we have items in local storage
+        if (result.length === 0) {
+          const localItems = getLocalCartItems();
+          if (localItems.length > 0) {
+            console.log('Using local storage cart items in header:', localItems);
+            return localItems;
+          }
+        }
+
+        return result;
+      } catch (error) {
+        console.error('Error fetching cart from server in header, falling back to local storage:', error);
+        // Fallback to local storage if server request fails
+        const localItems = getLocalCartItems();
+        console.log('Using local storage cart items as fallback in header:', localItems);
+        return localItems;
+      }
     },
     staleTime: 30000, // 30 seconds
   });
