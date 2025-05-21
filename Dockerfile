@@ -1,4 +1,4 @@
-FROM node:20-slim AS builder
+FROM node:20.11-slim AS builder
 
 WORKDIR /app
 
@@ -17,13 +17,13 @@ COPY shared/ ./shared/
 RUN npm ci
 
 # Create a custom build script
-RUN echo '#!/bin/sh\nset -e\necho "Building client..."\nnpx vite build\necho "Building server..."\nmkdir -p dist/server\ncp -r server/* dist/server/\ncp -r shared dist/\necho "Build completed successfully!"' > build.sh && chmod +x build.sh
+RUN echo '#!/bin/sh\nset -e\necho "Building client..."\nnpx vite build\necho "Building server..."\nmkdir -p dist/server dist/shared\ncp -r server/* dist/server/\ncp -r shared/* dist/shared/\necho "Creating server entry point..."\necho "require(\\\"./server/index.js\\\");" > dist/index.js\necho "Build completed successfully!"' > build.sh && chmod +x build.sh
 
 # Run the custom build script
 RUN ./build.sh
 
 # Production stage
-FROM node:20-slim
+FROM node:20.11-slim
 
 WORKDIR /app
 
@@ -36,10 +36,10 @@ RUN npm ci --omit=dev
 
 # Set environment variables
 ENV NODE_ENV=production
-ENV PORT=5000
+ENV PORT=8080
 
 # Expose the port
-EXPOSE 5000
+EXPOSE 8080
 
 # Start the application
-CMD ["node", "dist/server/index.js"]
+CMD ["node", "dist/index.js"]
