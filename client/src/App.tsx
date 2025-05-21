@@ -29,6 +29,10 @@ const AutoShopDashboard = lazy(() => import('@/pages/autoshop-dashboard'));
 // Import our custom hook
 import { useBackspaceNavigation } from '@/hooks/use-backspace-navigation';
 
+// Import our components
+import Sidebar from '@/components/layout/sidebar';
+import HomeLogo from '@/components/layout/home-logo';
+
 function Router() {
   // Use the backspace navigation hook
   useBackspaceNavigation();
@@ -37,11 +41,14 @@ function Router() {
 
   return (
     <div className="flex flex-col min-h-screen bg-[#E0E0E0] dark:bg-[#222222]">
+      <HomeLogo />
       <Header />
-      <main className="flex-grow bg-[#E0E0E0] dark:bg-[#222222]">
-        <PageManager />
-      </main>
-      <NavigationBar />
+      <div className="flex flex-1">
+        <Sidebar />
+        <main className="flex-grow bg-[#E0E0E0] dark:bg-[#222222] ml-[60px]">
+          <PageManager />
+        </main>
+      </div>
       <Workspace />
     </div>
   );

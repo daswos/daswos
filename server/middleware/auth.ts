@@ -4,7 +4,7 @@ import { storage } from '../storage';
 // Middleware to check if user is authenticated via session or token
 export const isAuthenticated = async (req: Request, res: Response, next: NextFunction) => {
   // First check if user is authenticated via session
-  if (req.isAuthenticated()) {
+  if (req.user) {
     return next();
   }
 

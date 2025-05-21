@@ -1,17 +1,64 @@
-import { Schema, model, Document, Types } from 'mongoose';
+import { Model } from 'objection';
+import knex from '../db/knex';
 
-export interface IUser extends Document {
-  id: string;
-  username: string;
-  coins: number;
+Model.knex(knex);
+
+class User extends Model {
+  static get tableName() {
+    return 'users';
+  }
+
+  static get idColumn() {
+    return 'id';
+  }
+
+  static get jsonSchema() {
+    return {
+      type: 'object',
+      required: ['username', 'email'],
+      properties: {
+        id: { type: 'integer' },
+        username: { type: 'string' },
+        email: { type: 'string' },
+        password_hash: { type: 'string' },
+        created_at: { type: 'string', format: 'date-time' },
+        updated_at: { type: 'string', format: 'date-time' },
+        is_admin: { type: 'boolean' },
+        is_seller: { type: 'boolean' }
+      }
+    };
+  }
+
+  static get relationMappings() {
+    return {
+      wallet: {
+        relation: Model.HasOneRelation,
+        modelClass: require('./DasWosWallet').default,
+        join: {
+          from: 'users.id',
+          to: 'daswos_wallets.user_id'
+        }
+      },
+      sentTransactions: {
+        relation: Model.HasManyRelation,
+        modelClass: require('./DasWosTransaction').default,
+        join: {
+          from: 'users.id',
+          to: 'daswos_transactions.from_user_id'
+        }
+      },
+      receivedTransactions: {
+        relation: Model.HasManyRelation,
+        modelClass: require('./DasWosTransaction').default,
+        join: {
+          from: 'users.id',
+          to: 'daswos_transactions.to_user_id'
+        }
+      }
+    };
+  }
 }
 
-const userSchema = new Schema<IUser>({
-  username: { type: String, required: true },
-  coins: { type: Number, default: 0 }
-});
-
-const User = model<IUser>('User', userSchema);
 export default User;
 
 

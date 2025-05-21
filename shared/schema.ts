@@ -3,6 +3,9 @@ import { createInsertSchema } from "drizzle-zod";
 import { never, z } from "zod";
 import { relations } from "drizzle-orm";
 import { sql } from "drizzle-orm";
+
+// Import DasWos Coins schema
+export * from "./daswos-coins-schema";
 import { truncate } from "fs";
 
 // User Schema

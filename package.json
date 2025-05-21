@@ -11,9 +11,12 @@
     "start-dev:alt": "echo \"\n============================================================\n🚀 Starting Daswos Application on alternate port...\n============================================================\n\n🔗 Application will be available at: http://localhost:3003\n\n============================================================\n\" && npm run dev:alt",
     "start-dev:win": "echo \"\n============================================================\n🚀 Starting Daswos Application on alternate port (Windows)...\n============================================================\n\n🔗 Application will be available at: http://localhost:3003\n\n============================================================\n\" && npm run dev:win",
     "build": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
-    "start": "NODE_ENV=production node dist/index.js",
+    "start": "node dist/index.js",
+    "gcp-build": "npm run build",
+    "deploy": "gcloud app deploy",
     "check": "tsc",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "db:migrate:coins": "node server/scripts/run-daswos-coins-migration.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
@@ -76,11 +79,13 @@
     "express-session": "^1.18.1",
     "framer-motion": "^11.13.1",
     "input-otp": "^1.2.4",
+    "knex": "^3.1.0",
     "langchain": "^0.3.21",
     "lucide-react": "^0.453.0",
     "memorystore": "^1.6.7",
     "mongoose": "^8.13.2",
     "multer": "^1.4.5-lts.2",
+    "objection": "^3.1.5",
     "passport": "^0.7.0",
     "passport-local": "^1.0.0",
     "pg": "^8.14.1",

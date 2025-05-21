@@ -20,10 +20,15 @@ const BrowseJobs = lazy(() => import('@/pages/browse-jobs'));
 const AiAssistant = lazy(() => import('@/pages/ai-assistant'));
 const Cart = lazy(() => import('@/pages/cart'));
 const DasWosCoins = lazy(() => import('@/pages/daswos-coins'));
+const DasWosCoinsSuccess = lazy(() => import('@/pages/daswos-coins/success'));
+const DasWosCoinsCancel = lazy(() => import('@/pages/daswos-coins/cancel'));
 
 // Checkout and order pages
 const Checkout = lazy(() => import('@/pages/checkout'));
 const OrderConfirmation = lazy(() => import('@/pages/order-confirmation'));
+
+// Seller pages
+const SellerOnboarding = lazy(() => import('@/pages/seller-onboarding'));
 
 // Loading fallback component
 const LoadingFallback = () => (
@@ -78,10 +83,16 @@ const PageManager: React.FC = () => {
         return <Cart />;
       case '/daswos-coins':
         return <DasWosCoins />;
+      case '/daswos-coins/success':
+        return <DasWosCoinsSuccess />;
+      case '/daswos-coins/cancel':
+        return <DasWosCoinsCancel />;
       case '/checkout':
         return <Checkout />;
       case '/order-confirmation':
         return <OrderConfirmation />;
+      case '/seller-onboarding':
+        return <SellerOnboarding />;
       default:
         return <NotFound />;
     }

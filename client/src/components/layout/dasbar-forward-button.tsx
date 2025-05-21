@@ -1,6 +1,5 @@
 import React from 'react';
-import { ArrowRight } from 'lucide-react';
-import DasWosHeaderLogo from '@/components/daswos-header-logo';
+import { ChevronRight } from 'lucide-react';
 
 interface DasbarForwardButtonProps {
   className?: string;
@@ -37,7 +36,7 @@ const DasbarForwardButton: React.FC<DasbarForwardButtonProps> = ({
       aria-label="Go forward"
       title="Forward"
     >
-      <ArrowRight className="h-5 w-5" />
+      <ChevronRight className="h-5 w-5" />
     </button>
   );
 };

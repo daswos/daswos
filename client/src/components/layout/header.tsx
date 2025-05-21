@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { DasWosCoinIcon } from '@/components/daswos-coin-icon';
 import DasWosCoinDisplay from '@/components/shared/daswos-coin-display';
+import DasWosCoinsBalance from '@/components/daswos-coins-balance';
 import AutoShopToggle from '@/components/autoshop-toggle';
 import { getLocalCartItems } from '@/lib/cart-storage';
 import {
@@ -44,69 +45,7 @@ import { useToast } from '@/hooks/use-toast';
 
 // Menu button import removed
 
-// Quick Purchase Button Component
-interface QuickPurchaseButtonProps {
-  amount: number;
-}
-
-const QuickPurchaseButton: React.FC<QuickPurchaseButtonProps> = ({ amount }) => {
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
-  const [isLoading, setIsLoading] = useState(false);
-
-  const handlePurchase = async () => {
-    setIsLoading(true);
-    try {
-      await apiRequest('/api/user/daswos-coins/purchase', {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          amount,
-          metadata: {
-            packageName: `${amount} DasWos Coins`,
-            purchaseTimestamp: new Date().toISOString()
-          }
-        }),
-      });
-
-      toast({
-        title: 'Coins Purchased',
-        description: `Successfully purchased ${amount.toLocaleString()} DasWos Coins`,
-      });
-
-      // Refresh coins balance
-      queryClient.invalidateQueries({ queryKey: ['/api/user/daswos-coins/balance'] });
-    } catch (error) {
-      toast({
-        title: 'Purchase Failed',
-        description: 'Failed to purchase coins. Please try again.',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  return (
-    <button
-      onClick={handlePurchase}
-      disabled={isLoading}
-      className="flex flex-col items-center justify-center bg-white border border-gray-300 p-1 text-xs hover:bg-gray-100 transition-colors"
-    >
-      {isLoading ? (
-        <Loader2 className="h-4 w-4 animate-spin" />
-      ) : (
-        <>
-          <DasWosCoinIcon size={14} className="mb-1" />
-          <span>{amount.toLocaleString()}</span>
-        </>
-      )}
-    </button>
-  );
-};
+// Quick Purchase Button Component moved to DasWosCoinsBalance component
 
 const Header = () => {
   const { user, logoutMutation } = useAuth();
@@ -392,26 +331,10 @@ const Header = () => {
 
   return (
     <header className="w-full sticky top-0 bg-[#E0E0E0] z-20 text-black">
-      <div className="container mx-auto px-4 py-2 flex items-center justify-between">
-        {/* Home Button */}
+      <div className="container mx-auto px-4 py-2 flex items-center justify-between pl-[70px]">
+        {/* Left section - empty now that home button is in sidebar */}
         <div className="flex items-center">
-          <button
-            onClick={() => {
-              // Navigate to home page
-              handleNavigation('/');
-
-              // Dispatch event to reset search interface
-              const resetEvent = new CustomEvent('resetSearchInterface', {
-                detail: { reset: true }
-              });
-              window.dispatchEvent(resetEvent);
-            }}
-            className="bg-[#E0E0E0] px-2 py-1 border border-gray-300 text-black flex items-center text-xs"
-            title="Home"
-          >
-            <Home className="h-4 w-4 mr-1" />
-            <span>Home</span>
-          </button>
+          {/* This space is intentionally left empty */}
         </div>
 
         {/* Center section - empty now that logo is moved to left */}
@@ -427,54 +350,8 @@ const Header = () => {
 
         {/* User Section */}
         <div className="flex items-center space-x-4">
-          {/* DasWos Coins Balance - Converted to dropdown for quick purchase */}
-          {user ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <div className="cursor-pointer">
-                  <DasWosCoinDisplay
-                    coinBalance={coinsData ? coinsData.balance : 0}
-                    size="sm"
-                  />
-                </div>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="bg-[#E0E0E0] text-black p-1 border border-gray-300 rounded-none shadow-md w-64 user-dropdown">
-                <div className="border-b border-gray-300 py-2 px-3 bg-gray-100">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-medium">DasWos Coins</h3>
-                    <div className="flex items-center">
-                      <DasWosCoinIcon size={16} className="mr-1" />
-                      <span className="font-medium">{coinsData ? coinsData.balance.toLocaleString() : 0}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="p-3">
-                  <h4 className="text-xs font-medium mb-2">Quick Purchase</h4>
-                  <div className="grid grid-cols-3 gap-2 mb-3">
-                    <QuickPurchaseButton amount={100} />
-                    <QuickPurchaseButton amount={500} />
-                    <QuickPurchaseButton amount={1000} />
-                  </div>
-                  <DropdownMenuItem
-                    onClick={() => handleNavigation('/daswos-coins')}
-                    className="w-full justify-center py-1 px-2 text-xs hover:bg-gray-200 rounded-none mt-2 user-menu-item"
-                  >
-                    Manage Coins
-                    <ChevronRight className="ml-1 h-3 w-3" />
-                  </DropdownMenuItem>
-                </div>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : (
-            <button
-              onClick={() => handleNavigation('/daswos-coins')}
-              className="bg-[#E0E0E0] px-2 py-1 border border-gray-300 text-black flex items-center text-xs"
-            >
-              <DasWosCoinIcon size={16} className="mr-1" />
-              <span>DasWos Coins</span>
-            </button>
-          )}
+          {/* DasWos Coins Balance */}
+          <DasWosCoinsBalance />
 
           {/* AI Search Button removed - now positioned under search bar */}
 

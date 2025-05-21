@@ -66,7 +66,7 @@ export function createCheckoutRoutes(storage: IStorage) {
     }
   });
 
-  // Create a payment intent for checkout
+  // Create a payment intent for checkout with direct payments to sellers
   router.post('/create-payment-intent', async (req, res) => {
     try {
       const schema = z.object({
@@ -91,6 +91,8 @@ export function createCheckoutRoutes(storage: IStorage) {
       // Get seller information for each item
       const sellerIds = new Set<number>();
       const itemsBySeller: Record<number, any[]> = {};
+      const sellerStripeAccounts: Record<number, string> = {};
+      const platformFeePercent = 0.10; // 10% platform fee
 
       for (const item of items) {
         try {
@@ -107,6 +109,14 @@ export function createCheckoutRoutes(storage: IStorage) {
               sellerId: product.sellerId,
               sellerName: product.sellerName
             });
+
+            // Get seller's Stripe account ID if we don't have it yet
+            if (!sellerStripeAccounts[product.sellerId]) {
+              const seller = await storage.getSellerById(product.sellerId);
+              if (seller && seller.stripeAccountId) {
+                sellerStripeAccounts[product.sellerId] = seller.stripeAccountId;
+              }
+            }
           }
         } catch (error) {
           console.error(`Error getting product ${item.productId}:`, error);
@@ -116,26 +126,80 @@ export function createCheckoutRoutes(storage: IStorage) {
       // Create transfer group ID for this order
       const transferGroup = `order_${Date.now()}`;
 
-      // Create a payment intent
-      const paymentIntent = await stripe.paymentIntents.create({
-        amount: amount * 100, // Convert to cents
-        currency: 'usd',
-        payment_method_types: ['card'],
-        transfer_group: transferGroup,
-        metadata: {
-          ...metadata,
-          order_id: `order_${Date.now()}`,
+      // Check if we have direct payment capability (all sellers have Stripe accounts)
+      const allSellersHaveStripeAccounts = Array.from(sellerIds).every(
+        sellerId => !!sellerStripeAccounts[sellerId]
+      );
+
+      let paymentIntent;
+
+      if (allSellersHaveStripeAccounts) {
+        // Use Stripe Connect for direct payments to sellers
+
+        // Calculate payment intent options with transfer data
+        const paymentIntentOptions: Stripe.PaymentIntentCreateParams = {
+          amount: Math.round(amount * 100), // Convert to cents
+          currency: 'usd',
+          payment_method_types: ['card'],
           transfer_group: transferGroup,
-          seller_ids: Array.from(sellerIds).join(','),
-          items_json: JSON.stringify(items.map(item => ({
-            id: item.id,
-            productId: item.productId,
-            name: item.name,
-            price: item.price,
-            quantity: item.quantity
-          })))
+          metadata: {
+            ...metadata,
+            order_id: `order_${Date.now()}`,
+            transfer_group: transferGroup,
+            seller_ids: Array.from(sellerIds).join(','),
+            items_json: JSON.stringify(items.map(item => ({
+              id: item.id,
+              productId: item.productId,
+              name: item.name,
+              price: item.price,
+              quantity: item.quantity
+            }))),
+            payment_type: 'direct_to_sellers'
+          }
+        };
+
+        // If there's only one seller, we can use the destination parameter
+        if (sellerIds.size === 1) {
+          const sellerId = Array.from(sellerIds)[0];
+          const sellerStripeAccount = sellerStripeAccounts[sellerId];
+
+          if (sellerStripeAccount) {
+            // Calculate platform fee
+            const applicationFeeAmount = Math.round(amount * platformFeePercent * 100); // in cents
+
+            paymentIntentOptions.application_fee_amount = applicationFeeAmount;
+            paymentIntentOptions.transfer_data = {
+              destination: sellerStripeAccount,
+            };
+          }
         }
-      });
+
+        // Create the payment intent
+        paymentIntent = await stripe.paymentIntents.create(paymentIntentOptions);
+
+      } else {
+        // Fall back to regular payment intent if not all sellers have Stripe accounts
+        paymentIntent = await stripe.paymentIntents.create({
+          amount: Math.round(amount * 100), // Convert to cents
+          currency: 'usd',
+          payment_method_types: ['card'],
+          transfer_group: transferGroup,
+          metadata: {
+            ...metadata,
+            order_id: `order_${Date.now()}`,
+            transfer_group: transferGroup,
+            seller_ids: Array.from(sellerIds).join(','),
+            items_json: JSON.stringify(items.map(item => ({
+              id: item.id,
+              productId: item.productId,
+              name: item.name,
+              price: item.price,
+              quantity: item.quantity
+            }))),
+            payment_type: 'platform_managed'
+          }
+        });
+      }
 
       // Store order information in database
       const order = await storage.createOrder({
@@ -153,12 +217,14 @@ export function createCheckoutRoutes(storage: IStorage) {
         status: 'pending',
         metadata: {
           ...metadata,
-          sellerIds: Array.from(sellerIds)
+          sellerIds: Array.from(sellerIds),
+          paymentType: allSellersHaveStripeAccounts ? 'direct_to_sellers' : 'platform_managed'
         }
       });
 
       console.log('Order created:', order.id);
       console.log('Payment intent created:', paymentIntent.id);
+      console.log('Payment type:', allSellersHaveStripeAccounts ? 'direct_to_sellers' : 'platform_managed');
 
       res.json({
         clientSecret: paymentIntent.client_secret,
@@ -415,6 +481,27 @@ async function handleSuccessfulPayment(paymentIntent: Stripe.PaymentIntent, stor
     // Update order status
     await storage.updateOrderStatus(order.id, 'completed');
 
+    // Check if this was a direct payment to sellers
+    const paymentType = paymentIntent.metadata?.payment_type;
+
+    if (paymentType === 'direct_to_sellers') {
+      console.log('Payment was made directly to sellers, no transfers needed');
+
+      // If this was a direct payment with destination in transfer_data,
+      // the money already went to the seller with the platform fee taken out
+      if (paymentIntent.transfer_data && paymentIntent.transfer_data.destination) {
+        console.log(`Payment sent directly to seller account: ${paymentIntent.transfer_data.destination}`);
+      } else {
+        // For multiple sellers, we would have separate transfers
+        console.log('Multiple sellers payment - transfers should be handled separately');
+      }
+
+      return;
+    }
+
+    // For platform-managed payments, we need to manually transfer to sellers
+    console.log('Processing platform-managed payment with manual transfers to sellers');
+
     // Process transfers to sellers
     const sellerIds = paymentIntent.metadata?.seller_ids?.split(',').map(id => parseInt(id)) || [];
     const items = JSON.parse(paymentIntent.metadata?.items_json || '[]');
@@ -444,9 +531,14 @@ async function handleSuccessfulPayment(paymentIntent: Stripe.PaymentIntent, stor
         // Get seller's Stripe account ID
         const seller = await storage.getSellerById(sellerId);
         if (seller && seller.stripeAccountId) {
+          // Calculate platform fee (10%)
+          const platformFeePercent = 0.10;
+          const platformFee = Math.round(sellerTotal * platformFeePercent * 100); // in cents
+          const sellerAmount = Math.round(sellerTotal * 100) - platformFee; // in cents
+
           // Create a transfer to the seller
           const transfer = await stripe.transfers.create({
-            amount: sellerTotal * 100, // Convert to cents
+            amount: sellerAmount,
             currency: 'usd',
             destination: seller.stripeAccountId,
             transfer_group: transferGroup,
@@ -454,11 +546,13 @@ async function handleSuccessfulPayment(paymentIntent: Stripe.PaymentIntent, stor
             metadata: {
               order_id: order.id,
               seller_id: sellerId,
-              items: sellerItems.map(item => item.name).join(', ')
+              items: sellerItems.map(item => item.name).join(', '),
+              platform_fee: platformFee
             }
           });
 
           console.log(`Created transfer to seller ${sellerId}:`, transfer.id);
+          console.log(`Seller amount: ${sellerAmount / 100}, Platform fee: ${platformFee / 100}`);
         } else {
           console.error(`Seller ${sellerId} does not have a Stripe account ID`);
 

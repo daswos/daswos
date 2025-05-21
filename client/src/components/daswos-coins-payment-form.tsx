@@ -9,8 +9,10 @@ import { DasWosCoinIcon } from '@/components/daswos-coin-icon';
 import { formatDasWosCoins } from '@/lib/utils';
 
 // Load Stripe outside of the component to avoid recreating the Stripe object on every render
-// Using type assertion to handle Vite environment variables
-const stripePromise = loadStripe((import.meta as any).env?.VITE_STRIPE_PUBLISHABLE_KEY || '');
+// Hardcoded Stripe publishable key for development
+const STRIPE_PUBLISHABLE_KEY = 'pk_live_51RJyu7H56GWeesIThVgLHAHXKv1GrWrhTNEEuZULBjjFMQlx4PWAKPCLI1ALjLwxYCRFQnpA40XwAjgcdeXWGXoa00XsoIA5oQ';
+console.log('Using Stripe publishable key:', STRIPE_PUBLISHABLE_KEY);
+const stripePromise = loadStripe(STRIPE_PUBLISHABLE_KEY);
 
 interface DasWosCoinsPaymentFormProps {
   amount: number;
@@ -28,7 +30,7 @@ export const DasWosCoinsPaymentForm: React.FC<DasWosCoinsPaymentFormProps> = ({
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    const createPaymentIntent = async () => {
+    const createCheckoutSession = async () => {
       setLoading(true);
       try {
         const response = await fetch('/api/payment/create-coins-intent', {
@@ -36,9 +38,9 @@ export const DasWosCoinsPaymentForm: React.FC<DasWosCoinsPaymentFormProps> = ({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             amount,
+            coinAmount: amount,
             metadata: {
-              productType: 'daswos_coins',
-              coinAmount: amount
+              productType: 'daswos_coins'
             }
           }),
         });
@@ -49,16 +51,28 @@ export const DasWosCoinsPaymentForm: React.FC<DasWosCoinsPaymentFormProps> = ({
         }
 
         const data = await response.json();
-        setClientSecret(data.clientSecret);
+
+        // If we have a checkout URL, redirect to it
+        if (data.url) {
+          window.location.href = data.url;
+          return;
+        }
+
+        // For backward compatibility
+        if (data.clientSecret) {
+          setClientSecret(data.clientSecret);
+        } else {
+          throw new Error('No checkout URL or client secret returned');
+        }
       } catch (err) {
         setError('Failed to initialize payment. Please try again.');
-        console.error('Error creating payment intent:', err);
+        console.error('Error creating checkout session:', err);
       } finally {
         setLoading(false);
       }
     };
 
-    createPaymentIntent();
+    createCheckoutSession();
   }, [amount]);
 
   if (loading) {
@@ -98,6 +112,82 @@ export const DasWosCoinsPaymentForm: React.FC<DasWosCoinsPaymentFormProps> = ({
         <Button onClick={onCancel} className="w-full">
           Go Back
         </Button>
+      </div>
+    );
+  }
+
+  // Check if we're using a mock client secret (for development)
+  if (clientSecret.startsWith('pi_mock')) {
+    return (
+      <div className="mt-4">
+        <div className="space-y-6">
+          <div className="bg-amber-50 p-3 rounded-md mb-4">
+            <p className="text-sm font-medium text-amber-800">
+              Development Mode: Using simulated payment
+            </p>
+            <p className="text-xs text-amber-700">
+              In production, this would show a real Stripe payment form.
+            </p>
+          </div>
+
+          <div className="space-y-4 p-4 border rounded">
+            <div className="space-y-2">
+              <label className="block text-sm font-medium">Card Number</label>
+              <input
+                type="text"
+                className="w-full p-2 border rounded"
+                value="4242 4242 4242 4242"
+                readOnly
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="block text-sm font-medium">Expiry</label>
+                <input
+                  type="text"
+                  className="w-full p-2 border rounded"
+                  value="12/25"
+                  readOnly
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium">CVC</label>
+                <input
+                  type="text"
+                  className="w-full p-2 border rounded"
+                  value="123"
+                  readOnly
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <Button
+              onClick={() => {
+                // Simulate successful payment
+                onSuccess({
+                  success: true,
+                  amount,
+                  balance: amount,
+                  isGuest: false
+                });
+              }}
+              className="w-full"
+            >
+              <CreditCard className="mr-2 h-4 w-4" />
+              Simulate Payment (${amount.toFixed(2)})
+            </Button>
+
+            <Button
+              variant="outline"
+              onClick={onCancel}
+              className="w-full"
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -174,7 +264,7 @@ const CheckoutForm: React.FC<CheckoutFormProps> = ({
 
       if (paymentIntent && paymentIntent.status === 'succeeded') {
         setSucceeded(true);
-        
+
         // Call the purchase API to add coins to the user's account
         try {
           const purchaseResponse = await apiRequest('/api/user/daswos-coins/purchase', {
@@ -192,7 +282,7 @@ const CheckoutForm: React.FC<CheckoutFormProps> = ({
               }
             }),
           });
-          
+
           onSuccess(purchaseResponse);
         } catch (purchaseError) {
           console.error('Error adding coins after payment:', purchaseError);
@@ -251,9 +341,9 @@ const CheckoutForm: React.FC<CheckoutFormProps> = ({
       )}
 
       <div className="flex flex-col gap-2">
-        <Button 
-          type="submit" 
-          disabled={!stripe || isProcessing} 
+        <Button
+          type="submit"
+          disabled={!stripe || isProcessing}
           className="w-full"
         >
           {isProcessing ? (
@@ -268,11 +358,11 @@ const CheckoutForm: React.FC<CheckoutFormProps> = ({
             </>
           )}
         </Button>
-        
-        <Button 
-          type="button" 
-          variant="outline" 
-          onClick={onCancel} 
+
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onCancel}
           disabled={isProcessing}
           className="w-full"
         >

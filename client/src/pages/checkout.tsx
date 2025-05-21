@@ -21,7 +21,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import CheckoutStripeForm from '@/components/checkout-stripe-form';
 
 // Load the Stripe instance outside the component to avoid reloading it
-const STRIPE_PUBLISHABLE_KEY = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || 'pk_test_TYooMQauvdEDq54NiTphI7jx';
+// Hardcoded Stripe publishable key for development
+const STRIPE_PUBLISHABLE_KEY = 'pk_live_51RJyu7H56GWeesIThVgLHAHXKv1GrWrhTNEEuZULBjjFMQlx4PWAKPCLI1ALjLwxYCRFQnpA40XwAjgcdeXWGXoa00XsoIA5oQ';
 console.log('Using Stripe publishable key:', STRIPE_PUBLISHABLE_KEY);
 const stripePromise = loadStripe(STRIPE_PUBLISHABLE_KEY);
 
@@ -437,23 +438,72 @@ const CheckoutPage: React.FC = () => {
                       </div>
 
                       {clientSecret ? (
-                        <Elements
-                          stripe={stripePromise}
-                          options={{
-                            clientSecret,
-                            appearance: { theme: 'stripe' },
-                          }}
-                        >
-                          <CheckoutStripeForm
-                            clientSecret={clientSecret}
-                            shippingInfo={shippingInfo}
-                            onSuccess={() => {
-                              setOrderComplete(true);
-                              clearLocalCart();
-                              queryClient.invalidateQueries({ queryKey: ['/api/user/cart'] });
+                        clientSecret.startsWith('pi_mock') ? (
+                          // For development/demo mode, show a simulated payment form
+                          <div className="space-y-4 p-4 border rounded">
+                            <div className="text-sm text-amber-600 bg-amber-50 p-2 rounded">
+                              Development Mode: Using simulated payment
+                            </div>
+                            <div className="space-y-2">
+                              <label className="block text-sm font-medium">Card Number</label>
+                              <input
+                                type="text"
+                                className="w-full p-2 border rounded"
+                                value="4242 4242 4242 4242"
+                                readOnly
+                              />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <label className="block text-sm font-medium">Expiry</label>
+                                <input
+                                  type="text"
+                                  className="w-full p-2 border rounded"
+                                  value="12/25"
+                                  readOnly
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <label className="block text-sm font-medium">CVC</label>
+                                <input
+                                  type="text"
+                                  className="w-full p-2 border rounded"
+                                  value="123"
+                                  readOnly
+                                />
+                              </div>
+                            </div>
+                            <Button
+                              className="w-full mt-4"
+                              onClick={() => {
+                                setOrderComplete(true);
+                                clearLocalCart();
+                                queryClient.invalidateQueries({ queryKey: ['/api/user/cart'] });
+                              }}
+                            >
+                              Simulate Payment
+                            </Button>
+                          </div>
+                        ) : (
+                          // For production, use the real Stripe Elements
+                          <Elements
+                            stripe={stripePromise}
+                            options={{
+                              clientSecret,
+                              appearance: { theme: 'stripe' },
                             }}
-                          />
-                        </Elements>
+                          >
+                            <CheckoutStripeForm
+                              clientSecret={clientSecret}
+                              shippingInfo={shippingInfo}
+                              onSuccess={() => {
+                                setOrderComplete(true);
+                                clearLocalCart();
+                                queryClient.invalidateQueries({ queryKey: ['/api/user/cart'] });
+                              }}
+                            />
+                          </Elements>
+                        )
                       ) : (
                         <div className="flex justify-center py-4">
                           <Loader2 className="h-6 w-6 animate-spin" />

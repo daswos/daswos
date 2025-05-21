@@ -86,18 +86,22 @@ app.use((req, res, next) => {
     serveStatic(app);
   }
 
-  // Use the port from environment variable or default to 3003
+  // Use the port from environment variable or default to 8080 (App Engine standard)
   // this serves both the API and the client.
-  const port = process.env.PORT ? parseInt(process.env.PORT) : 3003;
+  const port = process.env.PORT ? parseInt(process.env.PORT) : 8080;
+
+  // For App Engine, we need to listen on 0.0.0.0
+  const host = process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1';
+
   server.listen({
     port,
-    host: "127.0.0.1",
+    host,
   }, () => {
-    log(`serving on port ${port}`);
+    log(`serving on port ${port} with host ${host}`);
     console.log('\n');
     console.log('='.repeat(50));
-    console.log(`🚀 Application is running at: http://localhost:${port}`);
-    console.log(`🔗 Click the link above or copy it to your browser`);
+    console.log(`🚀 Application is running at: http://${host}:${port}`);
+    console.log(`🔗 In production, the app will be available at your App Engine URL`);
     console.log('='.repeat(50));
     console.log('\n');
   });

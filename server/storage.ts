@@ -535,6 +535,48 @@ export class FallbackStorage implements IStorage {
       stripeAccountId: `acct_mock_${id}`
     };
   }
+
+  // Stripe Connect operations
+  async updateUserStripeAccount(userId: number, stripeAccountId: string): Promise<User> {
+    const user = this.users.get(userId);
+    if (!user) {
+      throw new Error(`User with ID ${userId} not found`);
+    }
+
+    const updatedUser = {
+      ...user,
+      stripeAccountId,
+      updatedAt: new Date()
+    };
+
+    this.users.set(userId, updatedUser);
+    return updatedUser;
+  }
+
+  async getUserByStripeAccountId(stripeAccountId: string): Promise<User | undefined> {
+    for (const [_, user] of this.users.entries()) {
+      if (user.stripeAccountId === stripeAccountId) {
+        return user;
+      }
+    }
+    return undefined;
+  }
+
+  async updateUserSellerStatus(userId: number, isVerifiedSeller: boolean): Promise<User> {
+    const user = this.users.get(userId);
+    if (!user) {
+      throw new Error(`User with ID ${userId} not found`);
+    }
+
+    const updatedUser = {
+      ...user,
+      isVerifiedSeller,
+      updatedAt: new Date()
+    };
+
+    this.users.set(userId, updatedUser);
+    return updatedUser;
+  }
 }
 
 // Create an instance of the fallback storage to use when needed
@@ -625,6 +667,11 @@ export interface IStorage {
 
   // Seller operations
   getSellerById(id: number): Promise<any | undefined>;
+
+  // Stripe Connect operations
+  updateUserStripeAccount(userId: number, stripeAccountId: string): Promise<User>;
+  getUserByStripeAccountId(stripeAccountId: string): Promise<User | undefined>;
+  updateUserSellerStatus(userId: number, isVerifiedSeller: boolean): Promise<User>;
 }
 
 // Database storage implementation
@@ -3623,6 +3670,57 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  // Stripe Connect operations
+  async updateUserStripeAccount(userId: number, stripeAccountId: string): Promise<User> {
+    try {
+      const [user] = await db
+        .update(users)
+        .set({
+          stripeAccountId,
+          updatedAt: new Date()
+        })
+        .where(eq(users.id, userId))
+        .returning();
+
+      return user;
+    } catch (error) {
+      console.error("Error updating user Stripe account:", error);
+      throw error;
+    }
+  }
+
+  async getUserByStripeAccountId(stripeAccountId: string): Promise<User | undefined> {
+    try {
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.stripeAccountId, stripeAccountId));
+
+      return user;
+    } catch (error) {
+      console.error("Error getting user by Stripe account ID:", error);
+      return undefined;
+    }
+  }
+
+  async updateUserSellerStatus(userId: number, isVerifiedSeller: boolean): Promise<User> {
+    try {
+      const [user] = await db
+        .update(users)
+        .set({
+          isVerifiedSeller,
+          updatedAt: new Date()
+        })
+        .where(eq(users.id, userId))
+        .returning();
+
+      return user;
+    } catch (error) {
+      console.error("Error updating user seller status:", error);
+      throw error;
+    }
+  }
+
   // Daswos AI Chat operations
   async createDaswosAiChat(chat: InsertDaswosAiChat): Promise<DaswosAiChat> {
     try {
@@ -4140,7 +4238,7 @@ export class DatabaseStorage implements IStorage {
             ${sessionData.sessionToken},
             ${JSON.stringify(sessionData.deviceInfo)},
             TRUE,
-            ${sessionData.expiresAt}
+            ${sessionData.expiresAt.toISOString()}
           )
           RETURNING *
         `);

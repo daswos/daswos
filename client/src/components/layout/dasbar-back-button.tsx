@@ -1,6 +1,5 @@
 import React from 'react';
-import { ArrowLeft } from 'lucide-react';
-import DasWosHeaderLogo from '@/components/daswos-header-logo';
+import { ChevronLeft } from 'lucide-react';
 
 interface DasbarBackButtonProps {
   className?: string;
@@ -42,7 +41,7 @@ const DasbarBackButton: React.FC<DasbarBackButtonProps> = ({
       aria-label="Go back"
       title="Back"
     >
-      <ArrowLeft className="h-5 w-5" />
+      <ChevronLeft className="h-5 w-5" />
     </button>
   );
 };

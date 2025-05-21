@@ -12,9 +12,10 @@ import {
 } from '@stripe/react-stripe-js';
 
 // Load Stripe outside of the component to avoid recreating the Stripe object on every render
-// Use a fallback empty string if the env variable is not defined
-// Using type assertion to handle Vite environment variables
-const stripePromise = loadStripe((import.meta as any).env?.VITE_STRIPE_PUBLISHABLE_KEY || '');
+// Hardcoded Stripe publishable key for development
+const STRIPE_PUBLISHABLE_KEY = 'pk_live_51RJyu7H56GWeesIThVgLHAHXKv1GrWrhTNEEuZULBjjFMQlx4PWAKPCLI1ALjLwxYCRFQnpA40XwAjgcdeXWGXoa00XsoIA5oQ';
+console.log('Using Stripe publishable key:', STRIPE_PUBLISHABLE_KEY);
+const stripePromise = loadStripe(STRIPE_PUBLISHABLE_KEY);
 
 // Define types for our payment process
 interface SimpleStripeFormProps {

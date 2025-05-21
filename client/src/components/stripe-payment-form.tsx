@@ -7,9 +7,8 @@ import { AlertCircle, CheckCircle, Lock } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 // Load the Stripe instance outside the component to avoid reloading it
-// For development/testing, use the Stripe test publishable key
-// In production, use the environment variable
-const STRIPE_PUBLISHABLE_KEY = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || 'pk_test_TYooMQauvdEDq54NiTphI7jx';
+// Hardcoded Stripe publishable key for development
+const STRIPE_PUBLISHABLE_KEY = 'pk_live_51RJyu7H56GWeesIThVgLHAHXKv1GrWrhTNEEuZULBjjFMQlx4PWAKPCLI1ALjLwxYCRFQnpA40XwAjgcdeXWGXoa00XsoIA5oQ';
 console.log('Using Stripe publishable key:', STRIPE_PUBLISHABLE_KEY);
 const stripePromise = loadStripe(STRIPE_PUBLISHABLE_KEY);
 

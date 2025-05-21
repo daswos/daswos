@@ -98,13 +98,13 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
     <>
       {/* Expandable dasbar */}
       <div
-        className={`dasbar-items fixed left-[20px] bottom-[70px] z-[1001] flex flex-col-reverse space-y-reverse space-y-2 transition-all duration-300 ease-in-out ${
+        className={`dasbar-items fixed left-0 bottom-[70px] z-[1001] flex flex-col-reverse space-y-reverse space-y-0 transition-all duration-300 ease-in-out ${
           isExpanded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
         }`}
       >
         {/* Home button at the top of the expanded dasbar */}
         <button
-          className="dasbar-item w-[40px] h-[40px] bg-[#E0E0E0] dark:bg-gray-800 border border-gray-300 dark:border-gray-700 flex items-center justify-center"
+          className="dasbar-item w-[40px] h-[40px] flex items-center justify-center"
           onClick={() => {
             navigate('/');
             setIsExpanded(false);
@@ -135,7 +135,7 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
         {items.filter(item => item.id !== 'home').map((item, index) => (
           <button
             key={item.id}
-            className="dasbar-item w-[40px] h-[40px] bg-[#E0E0E0] dark:bg-gray-800 border border-gray-300 dark:border-gray-700 flex items-center justify-center"
+            className="dasbar-item w-[40px] h-[40px] flex items-center justify-center"
             onClick={() => {
               // Navigate using SPA structure
               navigate(item.path);
@@ -157,16 +157,16 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
       </div>
 
       {/* Navigation buttons */}
-      <div className="fixed bottom-[15px] left-[20px] z-[1001] flex items-center space-x-1">
+      <div className="fixed bottom-0 left-0 z-[1001] flex flex-col items-center navigation-bar bg-[#222222] w-[60px] py-2">
         {/* Expand/Home button */}
         <button
-          className={`nav-button home-logo-button relative ${isExpanded ? 'ring-2 ring-white dark:ring-gray-700' : ''}`}
+          className={`nav-button home-logo-button relative ${isExpanded ? 'text-white' : ''}`}
           onClick={handleHomeClick}
           aria-label={isExpanded ? "Go to home page" : "Expand dasbar"}
           title={isExpanded ? "Home" : "Expand"}
         >
-          <DasWosIconLogo height={24} width={24} className="dasbar-logo" />
-
+          <div className="w-4 h-4 bg-white"></div>
+          {isExpanded && <span className="absolute -right-16 bg-[#222222] text-[#cccccc] px-2 py-1 text-xs whitespace-nowrap">Expand</span>}
           <span className="sr-only">{isExpanded ? "Go to home page" : "Expand"} Dasbar</span>
         </button>
 
