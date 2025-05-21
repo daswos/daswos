@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: daswos
+    env: node
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: STRIPE_PUBLISHABLE_KEY
+        value: pk_live_51RJyu7H56GWeesIThVgLHAHXKv1GrWrhTNEEuZULBjjFMQlx4PWAKPCLI1ALjLwxYCRFQnpA40XwAjgcdeXWGXoa00XsoIA5oQ
+      - key: STRIPE_SECRET_KEY
+        value: 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
+      - key: SESSION_SECRET
+        value: daswos-production-session-secret-key
+      - key: DATABASE_URL
+        value: postgresql://neondb_owner:npg_j1h0TMQzEWpR@ep-rapid-tree-a2njogo6-pooler.eu-central1.aws.neon.tech/neondb?sslmode=require
+      - key: CLIENT_URL
+        value: https://daswos.onrender.com
