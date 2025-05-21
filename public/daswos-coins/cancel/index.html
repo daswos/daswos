@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Payment Cancelled - DasWos</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      background-color: #f5f5f5;
+      color: #333;
+    }
+    .container {
+      max-width: 800px;
+      padding: 2rem;
+      text-align: center;
+      background-color: white;
+      border-radius: 8px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    h1 {
+      font-size: 2.5rem;
+      margin-bottom: 1rem;
+      color: #f59e0b;
+    }
+    p {
+      font-size: 1.2rem;
+      line-height: 1.6;
+      margin-bottom: 1.5rem;
+    }
+    .logo {
+      max-width: 200px;
+      margin-bottom: 2rem;
+    }
+    .button {
+      display: inline-block;
+      background-color: #2563eb;
+      color: white;
+      padding: 0.75rem 1.5rem;
+      border-radius: 4px;
+      text-decoration: none;
+      font-weight: 600;
+      transition: background-color 0.2s;
+      margin: 0 0.5rem;
+    }
+    .button:hover {
+      background-color: #1d4ed8;
+    }
+    .button.secondary {
+      background-color: #6b7280;
+    }
+    .button.secondary:hover {
+      background-color: #4b5563;
+    }
+    .cancel-icon {
+      font-size: 5rem;
+      color: #f59e0b;
+      margin-bottom: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <img src="https://placehold.co/200x100/2563eb/FFFFFF?text=DasWos" alt="DasWos Logo" class="logo">
+    <div class="cancel-icon">✗</div>
+    <h1>Payment Cancelled</h1>
+    <p>Your payment was cancelled and you have not been charged.</p>
+    <p>If you experienced any issues during checkout, please try again or contact our support team.</p>
+    
+    <div>
+      <a href="/" class="button secondary">Return to Home</a>
+      <a href="/" id="tryAgain" class="button">Try Again</a>
+    </div>
+  </div>
+
+  <script>
+    // Add event listener to the "Try Again" button
+    document.getElementById('tryAgain').addEventListener('click', (e) => {
+      e.preventDefault();
+      
+      // Redirect to the payment page
+      window.location.href = '/#payment';
+    });
+  </script>
+</body>
+</html>

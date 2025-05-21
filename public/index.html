@@ -69,26 +69,33 @@
     <p>We're working hard to bring you the best shopping experience. Our platform will be launching soon!</p>
     <p>DasWos is a revolutionary platform that combines AI-powered shopping recommendations with a secure marketplace.</p>
     <a href="#" class="button" id="testApi">Test API Connection</a>
-    
+    <a href="#" class="button" id="testPayment" style="margin-left: 10px; background-color: #10b981;">Test Stripe Payment</a>
+
     <div class="status">
       <p>API Status: <span id="apiStatus">Checking...</span></p>
+      <p>Stripe Status: <span id="stripeStatus">Not tested</span></p>
     </div>
   </div>
 
   <script>
     document.getElementById('testApi').addEventListener('click', async (e) => {
       e.preventDefault();
-      
+
       const statusElement = document.getElementById('apiStatus');
       statusElement.textContent = 'Connecting...';
-      
+
       try {
         const response = await fetch('/.netlify/functions/api/health');
         const data = await response.json();
-        
+
         if (data.status === 'ok') {
           statusElement.textContent = `Connected! Server time: ${new Date(data.timestamp).toLocaleString()}`;
           statusElement.style.color = 'green';
+
+          // Show Stripe configuration status
+          const stripeInfo = data.stripeConfigured ? 'Stripe is configured' : 'Stripe is not configured (will use mock mode)';
+          document.getElementById('stripeStatus').textContent = stripeInfo;
+          document.getElementById('stripeStatus').style.color = data.stripeConfigured ? 'green' : 'orange';
         } else {
           statusElement.textContent = 'Connected, but server reported an issue.';
           statusElement.style.color = 'orange';
@@ -98,7 +105,52 @@
         statusElement.style.color = 'red';
       }
     });
-    
+
+    document.getElementById('testPayment').addEventListener('click', async (e) => {
+      e.preventDefault();
+
+      const statusElement = document.getElementById('stripeStatus');
+      statusElement.textContent = 'Creating payment session...';
+      statusElement.style.color = 'blue';
+
+      try {
+        const response = await fetch('/.netlify/functions/api/payment/create-coins-intent', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            amount: 10,
+            coinAmount: 100
+          })
+        });
+
+        const data = await response.json();
+
+        if (data.url) {
+          statusElement.textContent = 'Payment session created! Redirecting to Stripe...';
+          statusElement.style.color = 'green';
+
+          // Add info about mock mode if applicable
+          if (data.mock) {
+            statusElement.textContent += ' (Mock mode)';
+            statusElement.style.color = 'orange';
+          }
+
+          // Redirect to Stripe checkout after a short delay
+          setTimeout(() => {
+            window.location.href = data.url;
+          }, 1500);
+        } else {
+          statusElement.textContent = 'Payment session created but no redirect URL was provided.';
+          statusElement.style.color = 'orange';
+        }
+      } catch (error) {
+        statusElement.textContent = `Error: ${error.message}`;
+        statusElement.style.color = 'red';
+      }
+    });
+
     // Auto-check on page load
     window.addEventListener('load', () => {
       document.getElementById('testApi').click();
