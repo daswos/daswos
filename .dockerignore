@@ -11,5 +11,6 @@ replit.nix
 .devcontainer
 .vscode
 attached_assets
-**/dist
-**/build
+# Don't exclude dist for Docker build
+# **/dist
+# **/build

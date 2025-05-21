@@ -2,10 +2,11 @@ FROM node:20-slim AS builder
 
 WORKDIR /app
 
-# Copy package files
+# Copy package files and theme.json
 COPY package*.json ./
 COPY tsconfig.json ./
 COPY vite.config.ts ./
+COPY theme.json ./
 
 # Copy source code
 COPY client/ ./client/
@@ -15,8 +16,11 @@ COPY shared/ ./shared/
 # Install dependencies
 RUN npm ci
 
-# Build the application
-RUN npm run build
+# Create a custom build script
+RUN echo '#!/bin/sh\nset -e\necho "Building client..."\nnpx vite build\necho "Building server..."\nmkdir -p dist/server\ncp -r server/* dist/server/\ncp -r shared dist/\necho "Build completed successfully!"' > build.sh && chmod +x build.sh
+
+# Run the custom build script
+RUN ./build.sh
 
 # Production stage
 FROM node:20-slim
@@ -38,4 +42,4 @@ ENV PORT=5000
 EXPOSE 5000
 
 # Start the application
-CMD ["node", "dist/index.js"]
+CMD ["node", "dist/server/index.js"]
