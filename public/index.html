@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DasWos - Coming Soon</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      background-color: #f5f5f5;
+      color: #333;
+    }
+    .container {
+      max-width: 800px;
+      padding: 2rem;
+      text-align: center;
+      background-color: white;
+      border-radius: 8px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    h1 {
+      font-size: 2.5rem;
+      margin-bottom: 1rem;
+      color: #2563eb;
+    }
+    p {
+      font-size: 1.2rem;
+      line-height: 1.6;
+      margin-bottom: 1.5rem;
+    }
+    .logo {
+      max-width: 200px;
+      margin-bottom: 2rem;
+    }
+    .button {
+      display: inline-block;
+      background-color: #2563eb;
+      color: white;
+      padding: 0.75rem 1.5rem;
+      border-radius: 4px;
+      text-decoration: none;
+      font-weight: 600;
+      transition: background-color 0.2s;
+    }
+    .button:hover {
+      background-color: #1d4ed8;
+    }
+    .status {
+      margin-top: 2rem;
+      padding: 1rem;
+      background-color: #f3f4f6;
+      border-radius: 4px;
+    }
+    #apiStatus {
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <img src="https://placehold.co/200x100/2563eb/FFFFFF?text=DasWos" alt="DasWos Logo" class="logo">
+    <h1>DasWos</h1>
+    <p>We're working hard to bring you the best shopping experience. Our platform will be launching soon!</p>
+    <p>DasWos is a revolutionary platform that combines AI-powered shopping recommendations with a secure marketplace.</p>
+    <a href="#" class="button" id="testApi">Test API Connection</a>
+    
+    <div class="status">
+      <p>API Status: <span id="apiStatus">Checking...</span></p>
+    </div>
+  </div>
+
+  <script>
+    document.getElementById('testApi').addEventListener('click', async (e) => {
+      e.preventDefault();
+      
+      const statusElement = document.getElementById('apiStatus');
+      statusElement.textContent = 'Connecting...';
+      
+      try {
+        const response = await fetch('/.netlify/functions/api/health');
+        const data = await response.json();
+        
+        if (data.status === 'ok') {
+          statusElement.textContent = `Connected! Server time: ${new Date(data.timestamp).toLocaleString()}`;
+          statusElement.style.color = 'green';
+        } else {
+          statusElement.textContent = 'Connected, but server reported an issue.';
+          statusElement.style.color = 'orange';
+        }
+      } catch (error) {
+        statusElement.textContent = `Error: ${error.message}`;
+        statusElement.style.color = 'red';
+      }
+    });
+    
+    // Auto-check on page load
+    window.addEventListener('load', () => {
+      document.getElementById('testApi').click();
+    });
+  </script>
+</body>
+</html>

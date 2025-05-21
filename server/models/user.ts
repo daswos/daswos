@@ -1,5 +1,6 @@
 import { Model } from 'objection';
 import knex from '../db/knex';
+import * as path from 'path';
 
 Model.knex(knex);
 
