@@ -19,3 +19,4 @@ services:
         value: postgresql://neondb_owner:npg_j1h0TMQzEWpR@ep-rapid-tree-a2njogo6-pooler.eu-central1.aws.neon.tech/neondb?sslmode=require
       - key: CLIENT_URL
         value: https://daswos.onrender.com
+    healthCheckPath: /api/health

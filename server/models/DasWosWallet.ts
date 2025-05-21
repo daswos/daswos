@@ -1,5 +1,6 @@
 import { Model } from 'objection';
 import knex from '../db/knex';
+import path from 'path';
 
 Model.knex(knex);
 
@@ -25,11 +26,16 @@ class DasWosWallet extends Model {
   }
 
   static get relationMappings() {
-    // Using dynamic import to avoid circular dependencies
+    // Import path for User model
+    const userModelPath = path.join(__dirname, 'User');
+
     return {
       user: {
         relation: Model.BelongsToOneRelation,
-        modelClass: require('./User').default,
+        // Use a function that returns the model class to avoid circular dependencies
+        modelClass: function() {
+          return require(userModelPath).default;
+        },
         join: {
           from: 'daswos_wallets.user_id',
           to: 'users.id'
@@ -41,14 +47,14 @@ class DasWosWallet extends Model {
   // Get a user's wallet, creating it if it doesn't exist
   static async getOrCreateWallet(userId: number) {
     let wallet = await this.query().findById(userId);
-    
+
     if (!wallet) {
       wallet = await this.query().insert({
         user_id: userId,
         balance: 0
       });
     }
-    
+
     return wallet;
   }
 

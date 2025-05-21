@@ -30,10 +30,16 @@ class User extends Model {
   }
 
   static get relationMappings() {
+    // Import paths for related models
+    const walletModelPath = path.join(__dirname, 'DasWosWallet');
+    const transactionModelPath = path.join(__dirname, 'DasWosTransaction');
+
     return {
       wallet: {
         relation: Model.HasOneRelation,
-        modelClass: require('./DasWosWallet').default,
+        modelClass: function() {
+          return require(walletModelPath).default;
+        },
         join: {
           from: 'users.id',
           to: 'daswos_wallets.user_id'
@@ -41,7 +47,9 @@ class User extends Model {
       },
       sentTransactions: {
         relation: Model.HasManyRelation,
-        modelClass: require('./DasWosTransaction').default,
+        modelClass: function() {
+          return require(transactionModelPath).default;
+        },
         join: {
           from: 'users.id',
           to: 'daswos_transactions.from_user_id'
@@ -49,7 +57,9 @@ class User extends Model {
       },
       receivedTransactions: {
         relation: Model.HasManyRelation,
-        modelClass: require('./DasWosTransaction').default,
+        modelClass: function() {
+          return require(transactionModelPath).default;
+        },
         join: {
           from: 'users.id',
           to: 'daswos_transactions.to_user_id'

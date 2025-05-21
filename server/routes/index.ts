@@ -8,6 +8,11 @@ import dasWosCoinsRoutes from './dasWosCoinsRoutes';
 
 const router = express.Router();
 
+// Health check endpoint for Render
+router.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
 // Register all routes
 router.use('/reviews', reviewsRoutes);
 

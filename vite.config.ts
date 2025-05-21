@@ -13,13 +13,10 @@ export default defineConfig({
     react(),
     runtimeErrorOverlay(),
     themePlugin(),
+    // Removed Replit-specific plugins for production deployment
     ...(process.env.NODE_ENV !== "production" &&
     process.env.REPL_ID !== undefined
-      ? [
-          await import("@replit/vite-plugin-cartographer").then((m) =>
-            m.cartographer(),
-          ),
-        ]
+      ? []  // Empty array instead of dynamic import with top-level await
       : []),
   ],
   resolve: {
