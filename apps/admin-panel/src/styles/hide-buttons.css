@@ -1,0 +1,6 @@
+/* Hide the Browse Jobs, Filter, and Sort buttons on shopping pages */
+body:not(.d-list-page) .browse-jobs-button,
+body:not(.d-list-page) .filter-button,
+body:not(.d-list-page) .sort-button {
+  display: none !important;
+}

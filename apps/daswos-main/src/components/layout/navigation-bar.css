@@ -1,0 +1,298 @@
+/* Navigation Bar Styles */
+
+.nav-button {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  width: 40px;
+  padding: 0;
+  transition: all 0.2s ease;
+  z-index: 1001;
+  border-radius: 0;
+  background-color: transparent;
+  color: #333333;
+  border: none;
+}
+
+.nav-button:hover {
+  color: #000000;
+}
+
+.nav-button:active {
+  color: #000000;
+}
+
+/* Dark mode button styles */
+.dark .nav-button {
+  color: #888888;
+}
+
+.dark .nav-button:hover {
+  color: #cccccc;
+}
+
+.dark .nav-button:active {
+  color: #ffffff;
+}
+
+/* Home logo button styling */
+.home-logo-button {
+  background-color: transparent;
+  color: #333333;
+  border-radius: 0;
+  overflow: visible;
+}
+
+.home-logo-button:hover {
+  color: #000000;
+}
+
+.home-logo-button:active {
+  color: #000000;
+}
+
+.dark .home-logo-button {
+  color: #888888;
+}
+
+.dark .home-logo-button:hover {
+  color: #cccccc;
+}
+
+.dark .home-logo-button:active {
+  color: #ffffff;
+}
+
+.home-logo-button .dasbar-logo {
+  height: 16px;
+  width: 16px;
+}
+
+/* Expand button styling */
+.expand-button {
+  background-color: transparent;
+  color: #333333;
+  border-radius: 0;
+  overflow: visible;
+}
+
+.expand-button:hover {
+  color: #000000;
+}
+
+.expand-button:active {
+  color: #000000;
+}
+
+.dark .expand-button {
+  color: #888888;
+}
+
+.dark .expand-button:hover {
+  color: #cccccc;
+}
+
+.dark .expand-button:active {
+  color: #ffffff;
+}
+
+/* Logo icon styling */
+.home-logo-button svg {
+  width: 24px;
+  height: 24px;
+}
+
+/* Expand button icon styling */
+.expand-button svg {
+  width: 24px;
+  height: 24px;
+}
+
+/* Back button styling */
+.back-button {
+  background-color: transparent;
+  color: #333333;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.back-button:hover {
+  color: #000000;
+  background-color: transparent;
+}
+
+.back-button:active {
+  color: #000000;
+}
+
+.dark .back-button {
+  color: #888888;
+}
+
+.dark .back-button:hover {
+  color: #cccccc;
+  background-color: transparent;
+}
+
+.dark .back-button:active {
+  color: #ffffff;
+}
+
+/* Forward button styling */
+.forward-button {
+  background-color: transparent;
+  color: #333333;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.forward-button:hover {
+  color: #000000;
+  background-color: transparent;
+}
+
+.forward-button:active {
+  color: #000000;
+}
+
+.dark .forward-button {
+  color: #888888;
+}
+
+.dark .forward-button:hover {
+  color: #cccccc;
+  background-color: transparent;
+}
+
+.dark .forward-button:active {
+  color: #ffffff;
+}
+
+/* Dasbar item styling */
+.dasbar-item {
+  transition: all 0.2s ease;
+  position: relative;
+  background-color: transparent !important;
+  color: #333333 !important;
+  border: none !important;
+  border-radius: 0 !important;
+}
+
+.dasbar-item:hover {
+  color: #000000 !important;
+  background-color: transparent !important;
+}
+
+.dasbar-item:active {
+  color: #000000 !important;
+}
+
+/* Dark mode dasbar item styling */
+.dark .dasbar-item {
+  color: #888888 !important;
+}
+
+.dark .dasbar-item:hover {
+  color: #cccccc !important;
+  background-color: transparent !important;
+}
+
+.dark .dasbar-item:active {
+  color: #ffffff !important;
+}
+
+.dasbar-item::after {
+  content: attr(title);
+  position: absolute;
+  left: 60px;
+  top: 50%;
+  transform: translateY(-50%);
+  background-color: rgba(224, 224, 224, 0.95);
+  color: #333333;
+  padding: 4px 8px;
+  border-radius: 0;
+  font-size: 12px;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.2s ease;
+  pointer-events: none;
+  z-index: 1002;
+}
+
+.dark .dasbar-item::after {
+  background-color: rgba(34, 34, 34, 0.95);
+  color: #cccccc;
+}
+
+.dasbar-item:hover::after {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Dark mode styles */
+.dark .nav-button,
+.dark .back-button,
+.dark .forward-button,
+.dark .home-logo-button,
+.dark .dasbar-item {
+  background-color: transparent;
+  color: #888888;
+  border: none;
+}
+
+.dark .nav-button:hover,
+.dark .back-button:hover,
+.dark .forward-button:hover,
+.dark .home-logo-button:hover,
+.dark .dasbar-item:hover {
+  color: #cccccc;
+}
+
+.dark .nav-button:active,
+.dark .back-button:active,
+.dark .forward-button:active,
+.dark .home-logo-button:active,
+.dark .dasbar-item:active {
+  color: #ffffff;
+}
+
+/* Light mode styles */
+.nav-bar-container {
+  background-color: #E0E0E0;
+}
+
+.sidebar-container {
+  background-color: #E0E0E0;
+}
+
+/* Ensure the navigation bar has the right background in both modes */
+.navigation-bar {
+  background-color: #E0E0E0;
+}
+
+/* Dark mode styles for containers */
+.dark .nav-bar-container,
+.dark .sidebar-container,
+.dark .navigation-bar {
+  background-color: #222222;
+}
+
+/* Responsive adjustments */
+@media (max-width: 640px) {
+  .nav-button {
+    height: 36px;
+    width: 36px;
+  }
+
+  .dasbar-item {
+    height: 36px !important;
+    width: 36px !important;
+  }
+}

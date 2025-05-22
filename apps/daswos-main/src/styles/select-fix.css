@@ -1,0 +1,100 @@
+/* Fix for Select dropdown issues */
+
+/* Increase z-index for select dropdown to ensure it appears above other elements */
+[data-radix-select-content] {
+  z-index: 9999 !important; /* Higher z-index to ensure it's above other elements */
+  pointer-events: auto !important; /* Ensure clicks are captured */
+}
+
+/* Ensure the dropdown stays visible */
+[data-radix-select-viewport] {
+  display: block !important;
+  pointer-events: auto !important;
+}
+
+/* Fix positioning issues */
+[data-radix-select-content][data-side="bottom"] {
+  margin-top: 5px !important;
+}
+
+/* Ensure the dropdown doesn't get hidden by other elements */
+.SelectContent,
+.fixed-select-content {
+  position: relative;
+  z-index: 9999 !important;
+  pointer-events: auto !important;
+}
+
+/* Fix for dropdown disappearing */
+.SelectPortal {
+  position: fixed;
+  z-index: 9999 !important;
+}
+
+/* Make select items more clickable */
+[data-radix-select-item] {
+  cursor: pointer !important;
+  padding: 8px 12px !important;
+  margin: 2px 0 !important;
+  border-radius: 4px !important;
+  transition: background-color 0.2s ease !important;
+}
+
+/* Highlight on hover */
+[data-radix-select-item]:hover:not([data-disabled]) {
+  background-color: rgba(0, 0, 0, 0.05) !important;
+}
+
+/* Dark mode hover */
+.dark [data-radix-select-item]:hover:not([data-disabled]) {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Selected state */
+[data-radix-select-item][data-state="checked"] {
+  background-color: rgba(0, 0, 0, 0.1) !important;
+  font-weight: 500 !important;
+}
+
+/* Dark mode selected state */
+.dark [data-radix-select-item][data-state="checked"] {
+  background-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+/* Disabled state */
+[data-radix-select-item][data-disabled] {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+  background-color: rgba(0, 0, 0, 0.05) !important;
+  color: rgba(0, 0, 0, 0.4) !important;
+  pointer-events: none !important;
+}
+
+/* Dark mode disabled state */
+.dark [data-radix-select-item][data-disabled] {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  color: rgba(255, 255, 255, 0.4) !important;
+}
+
+/* Fix for fixed-select-wrapper */
+.fixed-select-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+/* Make the trigger more obvious */
+[data-radix-select-trigger] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+}
+
+[data-radix-select-trigger]:hover {
+  background-color: rgba(0, 0, 0, 0.05) !important;
+}
+
+.dark [data-radix-select-trigger]:hover {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+}

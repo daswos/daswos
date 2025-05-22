@@ -1,0 +1,40 @@
+.home-logo-button {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 60px;
+  height: 60px;
+  z-index: 1010;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #E0E0E0;
+  transition: all 0.2s ease;
+  border: none;
+  outline: none;
+}
+
+.dark .home-logo-button {
+  background-color: #222222;
+}
+
+.home-logo-button svg {
+  width: 24px;
+  height: 24px;
+}
+
+.home-logo-button rect {
+  fill: #333333;
+}
+
+.dark .home-logo-button rect {
+  fill: white;
+}
+
+.home-logo-button:hover rect {
+  fill: #000000;
+}
+
+.dark .home-logo-button:hover rect {
+  fill: #ffffff;
+}
